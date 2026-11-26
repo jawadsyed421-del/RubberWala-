@@ -1,8 +1,9 @@
 const url='wss://api.elevenlabs.io/v1/speech-to-text/realtime';
 
 export class StreamingRecognition {
-  constructor(getStream){
+  constructor(getStream,language){
     this.getStream=getStream;
+    this.language=language;
   }
 
   start(){
@@ -42,8 +43,9 @@ export class StreamingRecognition {
     if(controller.signal.aborted)return;
     const params=new URLSearchParams({
       token,model_id:'scribe_v2_realtime',audio_format:'pcm_16000',
-      language_code:'en',commit_strategy:'vad',vad_silence_threshold_secs:'.48',
+      commit_strategy:'vad',vad_silence_threshold_secs:'.48',
     });
+    if(this.language==='en'||this.language==='hi')params.set('language_code',this.language);
     const socket=new WebSocket(url+'?'+params);
     this.socket=socket;
     socket.onmessage=event=>{

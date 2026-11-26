@@ -2,15 +2,18 @@ import { listenForClaps } from './clap.js';
 import { createStreamingVoice, voiceProvider } from './voice-playback.js';
 import { StreamingRecognition } from './voice-recognition.js';
 import { findRoute, normalizeVoice } from './demo-operations.js';
+import { isHindi } from './hindi.js';
 
-const wakePhrase=/^\s*(?:(?:uh|um)[\s,.]+)*(?:hey|hi|okay|ok)[\s,]+(?:ralix|rahilx|ralyx|rallix|ra lix|ray licks|relics|alex|jarvis|jar vise|jar viz)\b[\s,.!?;:–—-]*/i;
+const wakePhrase=/^\s*(?:(?:uh|um|अं)[\s,.]+)*(?:(?:hey|hi|okay|ok)[\s,]+(?:ralix|rahilx|ralyx|rallix|ra lix|ray licks|relics|alex|jarvis|jar vise|jar viz)\b|(?:हे|हाय|ओके|hey|hi)[\s,]+(?:रैलिक्स|रेलिक्स|रालिक्स|रैलिक्‍स|राहिलक्स))(?=$|[\s,.!?;:–—।-])[\s,.!?;:–—।-]*/i;
 const greeting='Okay. Hi sir, what do you want?';
-const interruptWord=/^(?:stop|wait|hold on|one moment)$/;
+const hindiGreeting='जी सर, बताइए। मैं आपकी क्या मदद कर सकता हूँ?';
+const interruptWord=/^(?:stop|wait|hold on|one moment|रुको|रुकिए|ठहरो|ठहरिए)$/;
+const transcriptWords=text=>isHindi(text)?text.toLowerCase().replace(/[^\p{L}\p{M}\p{N}\s]/gu,' ').replace(/\s+/g,' ').trim():normalizeVoice(text);
 
 export function interruptionCandidate(transcript,reply,isFinal){
-  const heard=normalizeVoice(transcript);
+  const heard=transcriptWords(transcript);
   if(!heard)return false;
-  const spoken=normalizeVoice(reply);
+  const spoken=transcriptWords(reply);
   if((' '+spoken+' ').includes(' '+heard+' '))return false;
   if(interruptWord.test(heard))return true;
   if(wakePhrase.test(transcript))return true;
@@ -22,7 +25,7 @@ export function interruptionCandidate(transcript,reply,isFinal){
   return novel.length>=2||((isFinal||words.length>=3)&&novel.length/words.length>=.34);
 }
 
-export function createVoice({onCommand,onState,onDisable,onPlayback}){
+export function createVoice({onCommand,onState,onDisable,onPlayback,languagePreference=()=> 'auto'}){
   const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
   const synthesis=window.speechSynthesis;
   const streamingVoice=createStreamingVoice();
@@ -111,11 +114,12 @@ export function createVoice({onCommand,onState,onDisable,onPlayback}){
     state('speaking',text);
     const response=window.SpeechSynthesisUtterance?new SpeechSynthesisUtterance(text):{};
     utterance=response;
-    response.lang='en-IN';
-    response.rate=.94;
+    const language=isHindi(text)?'hi':'en';
+    response.lang=language==='hi'?'hi-IN':'en-IN';
+    response.rate=language==='hi'?.98:.94;
     const voices=synthesis?.getVoices()??[];
-    const voice=voices.find(item=>item.localService&&item.lang.toLowerCase()==='en-in')||
-      voices.find(item=>item.localService&&/^en[-_]/i.test(item.lang));
+    const voice=voices.find(item=>item.localService&&item.lang.toLowerCase()===response.lang.toLowerCase())||
+      voices.find(item=>item.localService&&item.lang.toLowerCase().slice(0,2)===language);
     if(voice)response.voice=voice;
     const done=()=>{
       if(utterance!==response)return;
@@ -167,7 +171,7 @@ export function createVoice({onCommand,onState,onDisable,onPlayback}){
         requested=true;
         clearTimeout(speechTimer);
         greetingAudio.pause();
-        streamingVoice.speak(text,{onEnd:done,onFallback:synthesize,onPlaying:playing});
+        streamingVoice.speak(text,{onEnd:done,onFallback:synthesize,onPlaying:playing,language});
       };
       greetingAudio.onended=done;
       greetingAudio.onerror=playRemote;
@@ -175,7 +179,7 @@ export function createVoice({onCommand,onState,onDisable,onPlayback}){
       greetingAudio.currentTime=0;
       speechTimer=setTimeout(playRemote,2000);
       void greetingAudio.play().catch(playRemote);
-    }else streamingVoice.speak(text,{onEnd:done,onFallback:synthesize,onPlaying:playing});
+    }else streamingVoice.speak(text,{onEnd:done,onFallback:synthesize,onPlaying:playing,language});
   }
 
   function handle(text){
@@ -183,16 +187,17 @@ export function createVoice({onCommand,onState,onDisable,onPlayback}){
     if(!wake&&!manual&&!conversation)return false;
     const command=(wake?text.slice(wake[0].length):text).trim();
     if(!command){
-      speak(greeting,true);
+      if(isHindi(text)||languagePreference()==='hi')speak(hindiGreeting,true);
+      else speak(greeting,true);
       return true;
     }
-    if(/^(?:stop listening|turn off (?:the )?(?:voice|microphone)|disable hands free)[.!?]*$/i.test(command)){
+    if(/^(?:stop listening|turn off (?:the )?(?:voice|microphone)|disable hands free|सुनना बंद करो|माइक बंद करो)[.!?।]*$/i.test(command)){
       onDisable?.();
       stop('Microphone off. Use Hands-free to enable it again.');
       return true;
     }
-    if(/^(?:go to sleep|stand by|standby|cancel|never mind)[.!?]*$/i.test(command)){
-      if(enabled){clapOnly=true;speak('Standing by.',false);}
+    if(/^(?:go to sleep|stand by|standby|cancel|never mind|बातचीत बंद करो|स्टैंडबाय पर जाओ)[.!?।]*$/i.test(command)){
+      if(enabled){clapOnly=true;speak(isHindi(command)?'ठीक है, बातचीत बंद कर रहा हूँ।':'Standing by.',false);}
       else stopManual();
       return true;
     }
@@ -241,7 +246,7 @@ export function createVoice({onCommand,onState,onDisable,onPlayback}){
         speechError='';
         if(current&&!current.remote)abort();
       }
-      speak(greeting,true);
+      speak(languagePreference()==='hi'?hindiGreeting:greeting,true);
     }
   }
 
@@ -254,10 +259,11 @@ export function createVoice({onCommand,onState,onDisable,onPlayback}){
   function start(){
     const remote=remoteAllowed&&!remoteFailed&&(manual||conversation);
     if((clapOnly&&!conversation&&!manual)||(!remote&&(!Recognition||nativeFailed))||speechError||current||(telling&&!canInterrupt)||document.hidden||(!enabled&&!manual))return;
-    const recognition=remote?new StreamingRecognition(()=>clapListener?.stream):new Recognition();
+    const language=languagePreference();
+    const recognition=remote?new StreamingRecognition(()=>clapListener?.stream,language):new Recognition();
     const session={recognition,remote,intentional:false,error:null,retryNative:false};
     current=session;
-    recognition.lang=local?'en-US':'en-IN';
+    recognition.lang=language==='hi'?'hi-IN':local?'en-US':'en-IN';
     if(local)recognition.processLocally=true;
     recognition.continuous=true;
     recognition.interimResults=true;
@@ -287,7 +293,7 @@ export function createVoice({onCommand,onState,onDisable,onPlayback}){
         }
         if(Date.now()<echoUntil&&spokenText&&!interruptionCandidate(transcript,spokenText,result.isFinal))continue;
         if(result.isFinal){
-          if(interruptWord.test(normalizeVoice(transcript)))continue;
+          if(interruptWord.test(transcriptWords(transcript)))continue;
           if(handle(transcript))break;
         }else if(wakePhrase.test(transcript)&&!transcript.replace(wakePhrase,'')){
           wakeTimer=setTimeout(()=>{
@@ -399,7 +405,7 @@ export function createVoice({onCommand,onState,onDisable,onPlayback}){
     if(Recognition?.available&&!(remoteAllowed&&(conversation||manual))){
       try{
         const availability=await Promise.race([
-          Recognition.available({langs:['en-US'],processLocally:true}),
+          Recognition.available({langs:[languagePreference()==='hi'?'hi-IN':'en-US'],processLocally:true}),
           new Promise(resolve=>setTimeout(()=>resolve('unknown'),750)),
         ]);
         if(token===setup)local=availability==='available';

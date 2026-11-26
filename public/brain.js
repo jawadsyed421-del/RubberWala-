@@ -4,6 +4,7 @@ import { projects, months, metrics, currency, departments } from './data.js';
 import { answerDemo, findRoute, normalizeVoice, operations, demoTasks, demoDocuments } from './demo-operations.js';
 import { cameraCommand } from './site-commands.js';
 import { constructionAnswer, constructionRecord, dateLabel } from './construction-data.js';
+import { hindiAnswer, hindiCommand, hindiProject, isHindi } from './hindi.js';
 
 const $=(selector,root=document)=>root.querySelector(selector);
 const view=$('#view');
@@ -214,7 +215,7 @@ function jarvis(){
     <div class="jarvis-grid"><section class="glass panel jarvis-identity"><button type="button" class="ralix-globe" id="ralix-globe" aria-label="${conversationActive?'Close Ralix conversation':'Start Ralix conversation'}" aria-pressed="${conversationActive}"><span class="ralix-ring"></span><span class="ralix-ring ralix-ring--outer"></span><span class="ralix-core"><i></i><i></i><i></i></span><span class="ralix-echo"></span></button><h2>Ralix</h2><p>Executive intelligence</p><span class="ralix-session-label">${conversationActive?'Conversation active':'Tap the globe to start'}</span></section>
     <section class="glass panel jarvis-response" aria-live="polite"><h2>${lastAnswer?clean(lastAnswer.title):'Ask the portfolio'}</h2>
     ${lastAnswer?`<p class="query">${clean(lastAnswer.query)}</p><strong class="display-number">${clean(lastAnswer.value)}</strong><p>${clean(lastAnswer.detail)}</p>${lastAnswer.route?`<a class="button quiet" href="#${lastAnswer.route}">View supporting records ↗</a>`:''}`:'<p>Start with a question about November sales, construction progress, receivables or a building floor.</p>'}
-    <div class="ralix-transcript" id="ralix-transcript" ${replyTranscript?'':'hidden'}><strong>Ralix reply</strong><p>${clean(replyTranscript)}</p></div>
+    <div class="ralix-transcript" id="ralix-transcript" ${replyTranscript?'':'hidden'}><strong>Ralix reply</strong><p lang="${isHindi(replyTranscript)?'hi':'en'}">${clean(replyTranscript)}</p></div>
     <div class="suggestions">${examples.map((q,i)=>`<button data-example="${i}">${q} ↗</button>`).join('')}</div></section></div>`;
 }
 function paintRalix(){
@@ -263,6 +264,27 @@ async function runSequence(commands,options){
 const actionResult=message=>({action:true,message});
 function ask(query,options={}){
   const q=query.trim(), normalized=normalizeVoice(q);
+  if(isHindi(q)){
+    const command=hindiCommand(q);
+    if(command){
+      const outcome=ask(command.command,options);
+      const localized=reply=>reply?.action?actionResult(/unavailable|not found|idle/i.test(reply.message)?
+        'यह कार्रवाई अभी उपलब्ध नहीं है।':command.message):'कृपया उस बिल्डिंग या सेक्शन का नाम बताइए।';
+      return outcome&&typeof outcome.then==='function'?outcome.then(localized):localized(outcome);
+    }
+    const explicit=hindiProject(q);
+    const project=explicit||projects[activeProject>=0?activeProject:contextProject>=0?contextProject:filter];
+    if(explicit){filter=explicit.index;contextProject=explicit.index;}
+    const parts=q.split(/\s+और\s+(?=(?:क्या|कब|कितन|कौन|कितनी|कितने))/).filter(Boolean);
+    const answers=parts.map(part=>hindiAnswer(part,{project,tasks}));
+    const first=answers[0];
+    const detail=[first.detail,...answers.slice(1).map(item=>item.value.replace(/[।?]$/,'')+'। '+item.detail)].join(' ');
+    lastAnswer={query:q,title:answers.length>1?'आपके सवालों के जवाब':first.title,value:first.value,detail,
+      route:answers.every(item=>item.route===first.route)?first.route:null};
+    if(!options.stayOnPage)navigate('ralix');
+    else if(activeRoute==='ralix')render();
+    return 'जी सर, '+first.value+(/[।!?]$/.test(first.value)?' ':'। ')+detail;
+  }
   if(!normalized)return;
   const command=normalized.replace(/^(?:uh |um |well |right |okay |ok |please |can you |could you |would you )+/,'').replace(/ please$/,'');
   const commands=q.split(/\s*,?\s+(?:(?:and )?then|and(?=\s+(?:zoom|spin|rotate|orbit|swipe|move|open|go to)\b))\s+/i);
@@ -613,6 +635,7 @@ const voiceSetup=$('#voice-setup');
 let dismissVoiceStatus;
 const voice=createVoice({
   onCommand:query=>ask(query,{stayOnPage:true}),
+  languagePreference:()=>saved('speechLanguage','auto'),
   onDisable:()=>store('voiceStandby',false),
   onPlayback(active){
     playingReply=active;
@@ -625,7 +648,12 @@ const voice=createVoice({
     if(name==='speaking'){
       replyTranscript=message;
       const transcript=$('#ralix-transcript');
-      if(transcript){transcript.querySelector('p').textContent=message;transcript.hidden=false;}
+      if(transcript){
+        const paragraph=transcript.querySelector('p');
+        paragraph.textContent=message;
+        paragraph.lang=isHindi(message)?'hi':'en';
+        transcript.hidden=false;
+      }
     }
     clearTimeout(dismissVoiceStatus);
     handsFree.dataset.voiceState=name;
@@ -650,10 +678,12 @@ handsFree.onclick=()=>{
   }
 };
 $('#clap-count').value=String(saved('clapCount',2));
+$('#speech-language').value=saved('speechLanguage','auto');
 $('#enable-mic').onclick=event=>{
   event.preventDefault();
   const count=Number($('#clap-count').value);
   store('clapCount',count);
+  store('speechLanguage',$('#speech-language').value);
   store('voiceStandby',true);
   voiceSetup.close();
   void voice.enable(count);

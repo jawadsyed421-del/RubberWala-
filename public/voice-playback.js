@@ -17,7 +17,7 @@ export function createStreamingVoice(){
     cancel?.();
     cancel=null;
   }
-  function speak(text,{onEnd,onFallback,onPlaying}){
+  function speak(text,{onEnd,onFallback,onPlaying,language}){
     stop();
     const controller=new AbortController();
     let audio, deadline, started=false, finished=false;
@@ -59,7 +59,7 @@ export function createStreamingVoice(){
         const reply=await fetch('/api/voice/replies',{
           method:'POST',
           headers:{'Content-Type':'application/json','X-Jarvis-Voice':'1'},
-          body:JSON.stringify({text}),
+          body:JSON.stringify({text,language}),
           signal:controller.signal,
         });
         if(!reply.ok){remoteUnavailable();return;}

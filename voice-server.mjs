@@ -63,7 +63,8 @@ export function createVoiceRoutes({apiKey,voiceId='JBFqnCBsd6RMkjVDRZzb',request
             return true;
           }
         }
-        const text=JSON.parse(payload)?.text?.trim();
+        const {text:input,language}=JSON.parse(payload);
+        const text=typeof input==='string'?input.trim():'';
         if(!text||text.length>1800){
           json(res,400,{error:'Expected 1 to 1800 reply characters'});
           return true;
@@ -75,7 +76,8 @@ export function createVoiceRoutes({apiKey,voiceId='JBFqnCBsd6RMkjVDRZzb',request
           return true;
         }
         const id=randomUUID();
-        tickets.set(id,{text,expires:now+15000});
+        const locale=['en','hi'].includes(language)?language:/\p{Script=Devanagari}/u.test(text)?'hi':'en';
+        tickets.set(id,{text,locale,expires:now+15000});
         json(res,201,{url:'/api/voice/stream/'+id});
       }catch{
         if(!res.writableEnded)json(res,400,{error:'Invalid reply'});
@@ -102,7 +104,8 @@ export function createVoiceRoutes({apiKey,voiceId='JBFqnCBsd6RMkjVDRZzb',request
       const upstream=await request('https://api.elevenlabs.io/v1/text-to-speech/'+voiceId+'/stream?output_format=mp3_22050_32',{
         method:'POST',
         headers:{'xi-api-key':apiKey,'Content-Type':'application/json','Accept':'audio/mpeg'},
-        body:JSON.stringify({text:ticket.text,model_id:'eleven_flash_v2_5',voice_settings:{style:0,use_speaker_boost:false,speed:1.04}}),
+        body:JSON.stringify({text:ticket.text,model_id:'eleven_flash_v2_5',language_code:ticket.locale,
+          voice_settings:{style:0,use_speaker_boost:false,speed:ticket.locale==='hi'?1:1.04}}),
         signal:controller.signal,
       });
       if(!upstream.ok||!upstream.body){
