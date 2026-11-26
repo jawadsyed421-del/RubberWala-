@@ -1,0 +1,1 @@
+{"name":"rubberwala-model-viewer","private":true,"type":"module","scripts":{"start":"node server.mjs","models":"node scripts/build-models.mjs"},"imports":{"#three":"./public/vendor/build/three.module.js"}}

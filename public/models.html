@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111817">
+  <title>Building Models | Rubberwala</title>
+  <link rel="stylesheet" href="/glass.css"><link rel="stylesheet" href="/viewer.css"><link rel="stylesheet" href="/brand.css">
+  <script type="importmap">
+    {"imports":{"three":"/vendor/build/three.module.js"}}
+  </script>
+  <script type="module" src="/viewer.js"></script>
+</head>
+<body>
+  <header>
+    <a class="brand-logo" href="/" aria-label="Rubberwala Brain home"><img src="/rubberwala-logo.png" width="441" height="332" alt="Rubberwala — The difference is personal"></a>
+    <span class="header-label">Architectural models</span>
+  </header>
+  <main>
+    <aside aria-label="Building selection">
+      <h1>Building<br> models</h1>
+      <nav id="models" aria-label="Buildings"></nav>
+    </aside>
+    <section class="viewer" aria-label="3D model viewer">
+      <div id="stage" tabindex="0" aria-label="Drag or use the arrow keys to orbit. Use plus and minus to zoom."></div>
+      <div class="viewer-heading">
+        <h2 id="model-title"></h2>
+        <a id="download" download>Download GLB <span aria-hidden="true">↓</span></a>
+      </div>
+      <p id="status" role="status"></p>
+      <div class="viewer-footer">
+        <span class="hint">Drag to orbit · Scroll or pinch to zoom</span>
+        <div class="controls" aria-label="View controls">
+          <button id="zoom-out" aria-label="Zoom out">−</button>
+          <button id="zoom-in" aria-label="Zoom in">+</button>
+          <button id="reset">Reset view</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
+
+
+
+
