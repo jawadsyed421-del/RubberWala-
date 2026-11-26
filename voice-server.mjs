@@ -33,7 +33,7 @@ export function createVoiceRoutes({apiKey,voiceId='JBFqnCBsd6RMkjVDRZzb',request
       }
       tokenInFlight=true;
       try{
-        const upstream=await request('https://api.elevenlabs.io/v1/single-use-token/realtime_scribe?max_session_duration_seconds=120',{
+        const upstream=await request('https://api.elevenlabs.io/v1/single-use-token/realtime_scribe?max_session_duration_seconds=600',{
           method:'POST',headers:{'xi-api-key':apiKey},signal:AbortSignal.timeout(6500),
         });
         if(!upstream.ok){
@@ -58,14 +58,14 @@ export function createVoiceRoutes({apiKey,voiceId='JBFqnCBsd6RMkjVDRZzb',request
       try{
         for await(const chunk of req){
           payload+=chunk;
-          if(payload.length>4096){
+          if(payload.length>8192){
             json(res,413,{error:'Reply is too large'});
             return true;
           }
         }
         const text=JSON.parse(payload)?.text?.trim();
-        if(!text||text.length>900){
-          json(res,400,{error:'Expected 1 to 900 reply characters'});
+        if(!text||text.length>1800){
+          json(res,400,{error:'Expected 1 to 1800 reply characters'});
           return true;
         }
         const now=Date.now();
@@ -97,7 +97,7 @@ export function createVoiceRoutes({apiKey,voiceId='JBFqnCBsd6RMkjVDRZzb',request
     const controller=new AbortController();
     const cancel=()=>controller.abort();
     res.once('close',cancel);
-    const timeout=setTimeout(cancel,20000);
+    const timeout=setTimeout(cancel,Math.max(15000,ticket.text.length*130));
     try{
       const upstream=await request('https://api.elevenlabs.io/v1/text-to-speech/'+voiceId+'/stream?output_format=mp3_22050_32',{
         method:'POST',

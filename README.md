@@ -49,6 +49,8 @@ In Property Universe, select **Enable hand gestures** and allow camera access. P
 
 After a closing clap, Ralix switches to local clap standby and stops the speech recognition session. Clap again or press Voice to start a new session.
 
+For a rehearsal, tap the Ralix globe and wait for the listening state. Ask “What’s the profit today?” and interrupt the reply with “How many floors are complete?” Then say “Open Finance” or “Open Documents.” The microphone stays active during responses, and supported navigation commands use the same session on the destination page.
+
 Clap detection runs locally and the greeting is bundled. Spoken commands use the browser’s speech recognizer, with installed on-device recognition preferred. Microphone access and automatic audio startup depend on browser settings.
 
 ## ElevenLabs spoken replies

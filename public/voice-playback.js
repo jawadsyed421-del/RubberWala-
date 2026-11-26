@@ -1,8 +1,11 @@
-let provider;
+let provider, providerCheckedAt=0;
 export function voiceProvider(){
-  provider??=fetch('/api/voice/status',{cache:'no-store',signal:AbortSignal.timeout(1200)})
-    .then(response=>response.ok?response.json():null)
-    .then(info=>info?.provider==='elevenlabs'?'elevenlabs':'browser',()=> 'browser');
+  if(!provider||Date.now()-providerCheckedAt>30000){
+    providerCheckedAt=Date.now();
+    provider=fetch('/api/voice/status',{cache:'no-store',signal:AbortSignal.timeout(1500)})
+      .then(response=>response.ok?response.json():null)
+      .then(info=>info?.provider==='elevenlabs'?'elevenlabs':'browser',()=> 'browser');
+  }
   return provider;
 }
 
@@ -22,7 +25,7 @@ export function createStreamingVoice(){
       clearTimeout(deadline);
       controller.abort();
       if(audio){
-        audio.onplaying=audio.onended=audio.onerror=null;
+        audio.onplaying=audio.onwaiting=audio.onended=audio.onerror=null;
         audio.pause();
         audio.removeAttribute('src');
         audio.load();
@@ -52,7 +55,7 @@ export function createStreamingVoice(){
           return;
         }
         if(finished)return;
-        deadline=setTimeout(remoteUnavailable,3500);
+        deadline=setTimeout(remoteUnavailable,4500);
         const reply=await fetch('/api/voice/replies',{
           method:'POST',
           headers:{'Content-Type':'application/json','X-Jarvis-Voice':'1'},
@@ -65,6 +68,11 @@ export function createStreamingVoice(){
         if(typeof url!=='string'||!url.startsWith('/api/voice/stream/')){remoteUnavailable();return;}
         audio=new Audio(url);
         audio.onplaying=()=>{started=true;clearTimeout(deadline);onPlaying?.();};
+        audio.onwaiting=()=>{
+          if(!started)return;
+          clearTimeout(deadline);
+          deadline=setTimeout(remoteUnavailable,7500);
+        };
         audio.onended=()=>finish(false);
         audio.onerror=remoteUnavailable;
         await audio.play();

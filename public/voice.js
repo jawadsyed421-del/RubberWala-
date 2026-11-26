@@ -3,7 +3,7 @@ import { createStreamingVoice, voiceProvider } from './voice-playback.js';
 import { StreamingRecognition } from './voice-recognition.js';
 import { findRoute, normalizeVoice } from './demo-operations.js';
 
-const wakePhrase=/^\s*(?:hey|hi|okay|ok)[\s,]+(?:ralix|rahilx|ralyx|rallix|ra lix|ray licks|relics|jarvis|jar vise|jar viz)\b[\s,.!?;:–—-]*/i;
+const wakePhrase=/^\s*(?:(?:uh|um)[\s,.]+)*(?:hey|hi|okay|ok)[\s,]+(?:ralix|rahilx|ralyx|rallix|ra lix|ray licks|relics|alex|jarvis|jar vise|jar viz)\b[\s,.!?;:–—-]*/i;
 const greeting='Okay. Hi sir, what do you want?';
 const interruptWord=/^(?:stop|wait|hold on|one moment)$/;
 
@@ -13,10 +13,12 @@ export function interruptionCandidate(transcript,reply,isFinal){
   const spoken=normalizeVoice(reply);
   if((' '+spoken+' ').includes(' '+heard+' '))return false;
   if(interruptWord.test(heard))return true;
+  if(wakePhrase.test(transcript))return true;
   const words=heard.split(' ');
   if(words.length<2)return isFinal&&Boolean(findRoute(heard));
   const previous=new Set(spoken.split(' '));
   const novel=words.filter(word=>!previous.has(word));
+  if((words.length>=3||isFinal)&&/^(?:and )?(?:what|which|how|when|where|why|open|show|zoom|go to|take me|switch to)\b/.test(heard)&&novel.length>0)return true;
   return novel.length>=2||((isFinal||words.length>=3)&&novel.length/words.length>=.34);
 }
 
@@ -33,6 +35,8 @@ export function createVoice({onCommand,onState,onDisable,onPlayback}){
   let commandToken=0;
   let spokenText='', echoUntil=0, canInterrupt=false;
   let clapOnly=false;
+  let networkRetries=0, resumeConversation=false;
+  let queuedCommand='';
 
   function state(name,message){
     onState({name,message,enabled,manual,conversation});
@@ -48,7 +52,7 @@ export function createVoice({onCommand,onState,onDisable,onPlayback}){
 
   function windowForCommand(){
     clearTimeout(followTimer);
-    if(manual)followTimer=setTimeout(stopManual,12000);
+    if(manual)followTimer=setTimeout(stopManual,45000);
   }
 
   function stopManual(){
@@ -78,6 +82,7 @@ export function createVoice({onCommand,onState,onDisable,onPlayback}){
     greetingAudio.pause();
     if(telling)synthesis?.cancel();
     telling=false;
+    queuedCommand='';
     onPlayback?.(false);
   }
 
@@ -87,6 +92,7 @@ export function createVoice({onCommand,onState,onDisable,onPlayback}){
     clapListener?.stop();
     clapListener=null;
     conversation=false;
+    resumeConversation=false;
     clearTimeout(followTimer);
     abort();
     cutReply();
@@ -101,6 +107,7 @@ export function createVoice({onCommand,onState,onDisable,onPlayback}){
     if(openFollowUp&&enabled)conversation=true;
     if(!canInterrupt)abort();
     else current?.recognition.resume?.();
+    if(canInterrupt&&!current)schedule(0);
     state('speaking',text);
     const response=window.SpeechSynthesisUtterance?new SpeechSynthesisUtterance(text):{};
     utterance=response;
@@ -130,15 +137,27 @@ export function createVoice({onCommand,onState,onDisable,onPlayback}){
       }else if(manual&&current){windowForCommand();ready();}
       else stopManual();
     };
-    const playing=()=>{if(utterance===response)onPlayback?.(true);};
-    response.onstart=playing;
+    const playing=()=>{
+      if(utterance!==response)return;
+      clearTimeout(speechTimer);
+      onPlayback?.(true);
+    };
+    response.onstart=()=>{
+      playing();
+      function checkSpeech(){
+        if(utterance!==response)return;
+        if(synthesis?.speaking===false&&!synthesis.pending){done();return;}
+        speechTimer=setTimeout(checkSpeech,1000);
+      }
+      speechTimer=setTimeout(checkSpeech,1000);
+    };
     response.onend=response.onerror=done;
-    speechTimer=setTimeout(()=>{streamingVoice.stop();greetingAudio.pause();synthesis?.cancel();done();},Math.max(7500,text.length*110));
     let synthesisStarted=false;
     const synthesize=()=>{
       if(utterance!==response||synthesisStarted)return;
       synthesisStarted=true;
       if(!synthesis||!window.SpeechSynthesisUtterance){done();return;}
+      speechTimer=setTimeout(()=>{done();synthesis.cancel();},5000);
       try{synthesis.speak(response);}catch{done();}
     };
     if(text===greeting){
@@ -146,12 +165,15 @@ export function createVoice({onCommand,onState,onDisable,onPlayback}){
       const playRemote=()=>{
         if(requested||utterance!==response)return;
         requested=true;
+        clearTimeout(speechTimer);
+        greetingAudio.pause();
         streamingVoice.speak(text,{onEnd:done,onFallback:synthesize,onPlaying:playing});
       };
       greetingAudio.onended=done;
       greetingAudio.onerror=playRemote;
       greetingAudio.onplaying=playing;
       greetingAudio.currentTime=0;
+      speechTimer=setTimeout(playRemote,2000);
       void greetingAudio.play().catch(playRemote);
     }else streamingVoice.speak(text,{onEnd:done,onFallback:synthesize,onPlaying:playing});
   }
@@ -176,6 +198,12 @@ export function createVoice({onCommand,onState,onDisable,onPlayback}){
     }
     const result=onCommand(command);
     const complete=reply=>{
+      if(queuedCommand){
+        const next=queuedCommand;
+        queuedCommand='';
+        telling=false;
+        if(handle(next))return;
+      }
       if(reply?.action){
         telling=false;
         current?.recognition.resume?.();
@@ -188,11 +216,11 @@ export function createVoice({onCommand,onState,onDisable,onPlayback}){
     if(result&&typeof result.then==='function'){
       const token=++commandToken;
       telling=true;
-      if(current?.remote&&!current.intentional)current.recognition.pause();
+      canInterrupt=false;
       state('working','Ralix is carrying out your command…');
       void Promise.resolve(result).then(
         reply=>{if(token===commandToken)complete(reply);},
-        ()=>{if(token===commandToken)speak('I couldn’t complete that command.',true);},
+        ()=>{if(token===commandToken)complete({action:true,message:'I couldn’t complete that command.'});},
       );
     }else complete(result);
     return true;
@@ -209,18 +237,23 @@ export function createVoice({onCommand,onState,onDisable,onPlayback}){
     }else{
       clapOnly=false;
       conversation=true;
+      if(remoteAllowed&&!remoteFailed){
+        speechError='';
+        if(current&&!current.remote)abort();
+      }
       speak(greeting,true);
     }
   }
 
   function schedule(delay){
     clearTimeout(restartTimer);
-    if(enabled&&(!clapOnly||conversation)&&!speechError&&!telling&&!document.hidden)restartTimer=setTimeout(start,delay);
+    if((enabled||manual)&&(!clapOnly||conversation)&&!speechError&&(!telling||canInterrupt)&&!document.hidden)
+      restartTimer=setTimeout(start,delay);
   }
 
   function start(){
     const remote=remoteAllowed&&!remoteFailed&&(manual||conversation);
-    if((clapOnly&&!conversation&&!manual)||(!remote&&(!Recognition||nativeFailed))||speechError||current||telling||document.hidden||(!enabled&&!manual))return;
+    if((clapOnly&&!conversation&&!manual)||(!remote&&(!Recognition||nativeFailed))||speechError||current||(telling&&!canInterrupt)||document.hidden||(!enabled&&!manual))return;
     const recognition=remote?new StreamingRecognition(()=>clapListener?.stream):new Recognition();
     const session={recognition,remote,intentional:false,error:null,retryNative:false};
     current=session;
@@ -232,17 +265,22 @@ export function createVoice({onCommand,onState,onDisable,onPlayback}){
       if(current===session&&!session.intentional){
         clearTimeout(startTimer);
         if(manual)windowForCommand();
-        ready();
+        if(!telling)ready();
       }
     };
     recognition.onresult=event=>{
       if(current!==session||session.intentional)return;
       attempts=0;
+      if(session.remote)networkRetries=0;
       clearTimeout(wakeTimer);
       for(let i=event.resultIndex;i<event.results.length;i++){
         const result=event.results[i];
         const transcript=result[0].transcript.trim();
         if(telling){
+          if(!utterance&&!canInterrupt){
+            if(result.isFinal&&(conversation||manual||wakePhrase.test(transcript)))queuedCommand=transcript;
+            continue;
+          }
           if(!canInterrupt||!interruptionCandidate(transcript,spokenText,result.isFinal))continue;
           cutReply();
           ready();
@@ -263,6 +301,10 @@ export function createVoice({onCommand,onState,onDisable,onPlayback}){
       const error=event.error;
       session.error=error;
       if(remote){
+        if(error==='network'&&networkRetries<2){
+          networkRetries++;
+          return;
+        }
         remoteFailed=true;
         if(Recognition&&!nativeFailed&&error!=='audio-capture')session.retryNative=true;
         else speechFailed(error==='audio-capture'?'Microphone access was denied or unavailable. Check permissions for this page.':'ElevenLabs speech recognition is unavailable. Check your key’s Speech to Text permission and account quota.');
@@ -283,8 +325,13 @@ export function createVoice({onCommand,onState,onDisable,onPlayback}){
       current=null;
       clearTimeout(startTimer);
       clearTimeout(wakeTimer);
-      if(session.retryNative&&!telling){start();return;}
-      if(telling||speechError)return;
+      if(session.retryNative){schedule(0);return;}
+      if(speechError||(telling&&!canInterrupt))return;
+      if(remote&&!session.intentional&&!remoteFailed&&(conversation||manual)){
+        if(!telling)state('reconnecting','Reconnecting Ralix’s microphone…');
+        schedule(session.error?200*networkRetries:0);
+        return;
+      }
       if(enabled){
         if(!session.intentional&&session.error&&session.error!=='no-speech'&&++attempts>=3){
           nativeFailed=true;
@@ -325,6 +372,7 @@ export function createVoice({onCommand,onState,onDisable,onPlayback}){
     speechError=Recognition?'':'Speech recognition is unavailable here. Try desktop Chrome for spoken commands.';
     preparing=true;
     remoteFailed=nativeFailed=false;
+    networkRetries=0;
     local=false;
     attempts=0;
     conversation=openConversation;
@@ -365,6 +413,7 @@ export function createVoice({onCommand,onState,onDisable,onPlayback}){
 
   document.addEventListener('visibilitychange',()=>{
     if(document.hidden){
+      resumeConversation=enabled&&conversation;
       clapListener?.pause();
       abort();
       cutReply();
@@ -374,6 +423,7 @@ export function createVoice({onCommand,onState,onDisable,onPlayback}){
       if(enabled)ready();
     }else if(enabled){
       clapListener?.resume();
+      if(resumeConversation){conversation=true;resumeConversation=false;}
       ready();
       schedule(100);
     }
