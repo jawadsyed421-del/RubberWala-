@@ -1,4 +1,5 @@
 let provider, providerCheckedAt=0;
+const silentAudio='data:audio/wav;base64,UklGRnQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YVAAAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==';
 export function voiceProvider(){
   if(!provider||Date.now()-providerCheckedAt>30000){
     providerCheckedAt=Date.now();
@@ -13,11 +14,24 @@ export function createStreamingVoice(){
   void voiceProvider();
   let cancel=null;
   let retryAfter=0;
+  const touchPlayback=navigator.maxTouchPoints>0;
+  let reusable=null,primed=false;
+  function unlock(){
+    if(!touchPlayback||primed||cancel)return;
+    reusable??=new Audio();
+    reusable.preload='auto';
+    reusable.setAttribute('playsinline','');
+    reusable.src=silentAudio;
+    void reusable.play().then(()=>{
+      primed=true;
+      if(reusable.src===silentAudio)reusable.pause();
+    },()=>{});
+  }
   function stop(){
     cancel?.();
     cancel=null;
   }
-  function speak(text,{onEnd,onFallback,onPlaying,language}){
+  function speak(text,{onEnd,onFallback,onPlaying,onBlocked,language}){
     stop();
     const controller=new AbortController();
     let audio, deadline, started=false, finished=false;
@@ -66,7 +80,8 @@ export function createStreamingVoice(){
         const {url}=await reply.json();
         if(finished)return;
         if(typeof url!=='string'||!url.startsWith('/api/voice/stream/')){remoteUnavailable();return;}
-        audio=new Audio(url);
+        audio=reusable||new Audio(url);
+        if(reusable)audio.src=url;
         audio.onplaying=()=>{started=true;clearTimeout(deadline);onPlaying?.();};
         audio.onwaiting=()=>{
           if(!started)return;
@@ -76,10 +91,14 @@ export function createStreamingVoice(){
         audio.onended=()=>finish(false);
         audio.onerror=remoteUnavailable;
         await audio.play();
-      }catch{
-        remoteUnavailable();
+      }catch(error){
+        if(error?.name==='NotAllowedError'&&onBlocked&&!finished){
+          primed=false;
+          onBlocked();
+          finish(false);
+        }else remoteUnavailable();
       }
     })();
   }
-  return {speak,stop};
+  return {speak,stop,unlock};
 }

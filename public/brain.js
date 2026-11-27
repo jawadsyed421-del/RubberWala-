@@ -944,6 +944,8 @@ $('#menu').onclick=()=>{
 };
 const handsFree=$('#hands-free');
 const manualVoice=$('#voice');
+const tourVoice=$('#tour-voice');
+const voiceReplay=$('#voice-replay');
 const voiceStatus=$('#voice-status');
 const voiceSetup=$('#voice-setup');
 let dismissVoiceStatus;
@@ -951,6 +953,7 @@ const voice=createVoice({
   onCommand:query=>ask(query,{stayOnPage:true}),
   languagePreference:()=>saved('speechLanguage','auto'),
   onDisable:()=>store('voiceStandby',false),
+  onAudioBlocked:blocked=>{voiceReplay.hidden=!blocked;},
   onPlayback(active){
     playingReply=active;
     document.body.classList.toggle('ralix-speaking',active);
@@ -976,6 +979,8 @@ const voice=createVoice({
     $('#hands-free-label').textContent=name==='starting'?'Starting…':name==='limited'?'Voice limited':['listening','speaking','working'].includes(name)?'rAlix active':enabled?'rAlix standby':'Hands-free';
     manualVoice.textContent=manual?'Listening…':'Voice';
     manualVoice.disabled=manual||['starting','speaking','working','listening'].includes(name);
+    tourVoice.disabled=manualVoice.disabled;
+    tourVoice.textContent=manual?'Listening…':'Voice';
     voiceStatus.textContent=message;
     voiceStatus.hidden=false;
     if(['off','armed','clap-standby'].includes(name))dismissVoiceStatus=setTimeout(()=>{voiceStatus.hidden=true;},5500);
@@ -1000,9 +1005,12 @@ $('#enable-mic').onclick=event=>{
   store('speechLanguage',$('#speech-language').value);
   store('voiceStandby',true);
   voiceSetup.close();
+  voice.unlock();
   void voice.enable(count);
 };
 manualVoice.onclick=()=>voice.once();
+tourVoice.onclick=()=>voice.once();
+voiceReplay.onclick=()=>voice.playReply();
 
 async function resumeVoiceStandby(){
   if(saved('voiceStandby',null)===false)return;

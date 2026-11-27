@@ -5,7 +5,7 @@ import { pipeline } from 'node:stream/promises';
 export function createVoiceRoutes({apiKey,voiceId='JBFqnCBsd6RMkjVDRZzb',request=fetch}){
   const configured=Boolean(apiKey&&/^[a-zA-Z0-9]{20,32}$/.test(voiceId));
   const ticketKey=configured?createHash('sha256').update('ralix-voice-ticket-v1\0').update(apiKey).digest():null;
-  const productionHosts=new Set(['ralix.ceo','www.ralix.ceo','rubberwala-seven.vercel.app']);
+  const productionHosts=new Set(['ralix.ceo','www.ralix.ceo','rubberwala.ralix.ceo','rubberwala-seven.vercel.app']);
   const tickets=new Map();
   let streaming=0;
   let tokenInFlight=false;

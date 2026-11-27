@@ -1,6 +1,6 @@
 import { listenForClaps } from './clap.js';
 import { createStreamingVoice, voiceProvider } from './voice-playback.js';
-import { StreamingRecognition } from './voice-recognition.js';
+import { createCaptureContext, StreamingRecognition } from './voice-recognition.js';
 import { findRoute, normalizeVoice } from './demo-operations.js';
 import { isHindi } from './hindi.js';
 
@@ -25,7 +25,7 @@ export function interruptionCandidate(transcript,reply,isFinal){
   return novel.length>=2||((isFinal||words.length>=3)&&novel.length/words.length>=.34);
 }
 
-export function createVoice({onCommand,onState,onDisable,onPlayback,languagePreference=()=> 'auto'}){
+export function createVoice({onCommand,onState,onDisable,onPlayback,onAudioBlocked,languagePreference=()=> 'auto'}){
   const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
   const synthesis=window.speechSynthesis;
   const streamingVoice=createStreamingVoice();
@@ -40,6 +40,16 @@ export function createVoice({onCommand,onState,onDisable,onPlayback,languagePref
   let clapOnly=false;
   let networkRetries=0, resumeConversation=false;
   let queuedCommand='';
+  let captureContext=null, replay=null;
+
+  function unlock(){
+    streamingVoice.unlock();
+    synthesis?.resume?.();
+    try{
+      if(!captureContext||captureContext.state==='closed')captureContext=createCaptureContext();
+      void captureContext.resume().catch(()=>{});
+    }catch{}
+  }
 
   function state(name,message){
     onState({name,message,enabled,manual,conversation});
@@ -99,10 +109,16 @@ export function createVoice({onCommand,onState,onDisable,onPlayback,languagePref
     clearTimeout(followTimer);
     abort();
     cutReply();
+    replay=null;
+    onAudioBlocked?.(false);
+    if(captureContext?.state!=='closed')void captureContext?.close().catch(()=>{});
+    captureContext=null;
     state('off',message);
   }
 
   function speak(text,openFollowUp){
+    replay=null;
+    onAudioBlocked?.(false);
     telling=true;
     clearTimeout(followTimer);
     canInterrupt=openFollowUp;
@@ -155,23 +171,29 @@ export function createVoice({onCommand,onState,onDisable,onPlayback,languagePref
       }
       speechTimer=setTimeout(checkSpeech,1000);
     };
-    response.onend=response.onerror=done;
+    response.onend=done;
     let synthesisStarted=false;
+    const blocked=()=>{
+      if(utterance!==response)return;
+      replay={text,openFollowUp};
+      onAudioBlocked?.(true);
+    };
+    response.onerror=event=>{if(event.error==='not-allowed')blocked();done();};
     const synthesize=()=>{
       if(utterance!==response||synthesisStarted)return;
       synthesisStarted=true;
-      if(!synthesis||!window.SpeechSynthesisUtterance){done();return;}
+      if(!synthesis||!window.SpeechSynthesisUtterance){blocked();done();return;}
       speechTimer=setTimeout(()=>{done();synthesis.cancel();},5000);
       try{synthesis.speak(response);}catch{done();}
     };
-    if(text===greeting){
+    if(text===greeting&&!(navigator.maxTouchPoints>0)){
       let requested=false;
       const playRemote=()=>{
         if(requested||utterance!==response)return;
         requested=true;
         clearTimeout(speechTimer);
         greetingAudio.pause();
-        streamingVoice.speak(text,{onEnd:done,onFallback:synthesize,onPlaying:playing,language});
+        streamingVoice.speak(text,{onEnd:done,onFallback:synthesize,onPlaying:playing,onBlocked:blocked,language});
       };
       greetingAudio.onended=done;
       greetingAudio.onerror=playRemote;
@@ -179,7 +201,7 @@ export function createVoice({onCommand,onState,onDisable,onPlayback,languagePref
       greetingAudio.currentTime=0;
       speechTimer=setTimeout(playRemote,2000);
       void greetingAudio.play().catch(playRemote);
-    }else streamingVoice.speak(text,{onEnd:done,onFallback:synthesize,onPlaying:playing,language});
+    }else streamingVoice.speak(text,{onEnd:done,onFallback:synthesize,onPlaying:playing,onBlocked:blocked,language});
   }
 
   function handle(text){
@@ -260,7 +282,7 @@ export function createVoice({onCommand,onState,onDisable,onPlayback,languagePref
     const remote=remoteAllowed&&!remoteFailed&&(manual||conversation);
     if((clapOnly&&!conversation&&!manual)||(!remote&&(!Recognition||nativeFailed))||speechError||current||(telling&&!canInterrupt)||document.hidden||(!enabled&&!manual))return;
     const language=languagePreference();
-    const recognition=remote?new StreamingRecognition(()=>clapListener?.stream,language):new Recognition();
+    const recognition=remote?new StreamingRecognition(()=>clapListener?.stream,language,captureContext):new Recognition();
     const session={recognition,remote,intentional:false,error:null,retryNative:false};
     current=session;
     recognition.lang=language==='hi'?'hi-IN':local?'en-US':'en-IN';
@@ -375,7 +397,7 @@ export function createVoice({onCommand,onState,onDisable,onPlayback,languagePref
     enabled=handsFree;
     manual=!handsFree;
     clapCount=count;
-    speechError=Recognition?'':'Speech recognition is unavailable here. Try desktop Chrome for spoken commands.';
+    speechError=Recognition?'':'Speech recognition is unavailable here. Open this link in Safari or Chrome, or type a command.';
     preparing=true;
     remoteFailed=nativeFailed=false;
     networkRetries=0;
@@ -436,6 +458,7 @@ export function createVoice({onCommand,onState,onDisable,onPlayback,languagePref
   });
   window.addEventListener('pagehide',()=>stop());
   function once(){
+    unlock();
     if(!enabled)return activate(false);
     if(telling||conversation||!remoteAllowed||remoteFailed)return;
     clapOnly=false;
@@ -446,6 +469,7 @@ export function createVoice({onCommand,onState,onDisable,onPlayback,languagePref
     schedule(100);
   }
   function toggleControl(count){
+    unlock();
     if(preparing)return;
     if(conversation){toggleConversation();return;}
     if(!enabled){void activate(true,count,true);return;}
@@ -458,7 +482,11 @@ export function createVoice({onCommand,onState,onDisable,onPlayback,languagePref
     ready();
     schedule(0);
   }
-  return {enable:count=>activate(true,count),once,toggleControl,stop,isEnabled:()=>enabled};
+  return {enable:count=>activate(true,count),once,toggleControl,stop,unlock,playReply(){
+    if(!replay)return;
+    unlock();
+    speak(replay.text,replay.openFollowUp);
+  },isEnabled:()=>enabled};
 }
 
 

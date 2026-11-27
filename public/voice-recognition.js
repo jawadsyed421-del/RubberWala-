@@ -1,9 +1,17 @@
 const url='wss://api.elevenlabs.io/v1/speech-to-text/realtime';
+export function createCaptureContext(){
+  const AudioContext=window.AudioContext||window.webkitAudioContext;
+  if(!AudioContext)throw new Error('Audio capture unavailable');
+  if(navigator.maxTouchPoints>0)return new AudioContext();
+  try{return new AudioContext({sampleRate:16000});}
+  catch{return new AudioContext();}
+}
 
 export class StreamingRecognition {
-  constructor(getStream,language){
+  constructor(getStream,language,sharedContext){
     this.getStream=getStream;
     this.language=language;
+    this.sharedContext=sharedContext;
   }
 
   start(){
@@ -15,9 +23,7 @@ export class StreamingRecognition {
   }
 
   async connect(controller){
-    const AudioContext=window.AudioContext||window.webkitAudioContext;
-    if(!AudioContext)throw new Error('Audio capture unavailable');
-    const context=new AudioContext({sampleRate:16000});
+    const context=this.sharedContext||createCaptureContext();
     this.context=context;
     void context.resume().catch(()=>{});
     const canUseWorklet=window.AudioWorkletNode&&context.audioWorklet;
@@ -70,6 +76,7 @@ export class StreamingRecognition {
 
   attach(stream,context,socket,useWorklet){
     const source=context.createMediaStreamSource(stream);
+    this.source=source;
     const send=buffer=>{
       if(this.paused||socket.readyState!==WebSocket.OPEN)return;
       if(socket.bufferedAmount>128000){
@@ -81,28 +88,34 @@ export class StreamingRecognition {
     };
     if(useWorklet){
       const processor=new AudioWorkletNode(context,'ralix-voice-capture',{channelCount:1,channelCountMode:'explicit'});
+      this.processor=processor;
       processor.port.onmessage=event=>send(event.data);
       source.connect(processor);
       processor.connect(context.destination);
       return;
     }
     const processor=context.createScriptProcessor(1024,1,1);
+    this.processor=processor;
     source.connect(processor);
     processor.connect(context.destination);
+    let position=0;
+    const ratio=(context.sampleRate||16000)/16000;
     processor.onaudioprocess=event=>{
       if(this.paused||socket.readyState!==WebSocket.OPEN||socket.bufferedAmount>128000)return;
       const samples=event.inputBuffer.getChannelData(0);
-      const pcm=new DataView(new ArrayBuffer(samples.length*2));
-      for(let i=0;i<samples.length;i++){
-        const sample=Math.max(-1,Math.min(1,samples[i]));
-        pcm.setInt16(i*2,sample*(sample<0?32768:32767),true);
+      const pcm=new Int16Array(Math.ceil(samples.length/ratio));
+      let size=0;
+      for(;position<samples.length;position+=ratio){
+        const sample=Math.max(-1,Math.min(1,samples[Math.floor(position)]));
+        pcm[size++]=sample*(sample<0?32768:32767);
       }
-      send(pcm.buffer);
+      position-=samples.length;
+      send(pcm.slice(0,size).buffer);
     };
   }
 
   pause(){this.paused=true;}
-  resume(){this.paused=false;}
+  resume(){this.paused=false;void this.context?.resume().catch(()=>{});}
 
   fail(error){
     if(this.controller?.signal.aborted)return;
@@ -118,7 +131,9 @@ export class StreamingRecognition {
       this.socket.onmessage=this.socket.onerror=this.socket.onclose=null;
       this.socket.close();
     }
-    if(this.context?.state!=='closed')void this.context?.close().catch(()=>{});
+    this.source?.disconnect?.();
+    this.processor?.disconnect?.();
+    if(!this.sharedContext&&this.context?.state!=='closed')void this.context?.close().catch(()=>{});
     queueMicrotask(()=>this.onend?.());
   }
 }

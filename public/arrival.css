@@ -105,3 +105,17 @@
 @media(prefers-reduced-transparency:reduce) {
   :root {--glass-filter:none;--glass-surface:#2f1f18;--glass-raised:#362319}
 }
+
+.voice-replay {position:fixed;z-index:10;right:16px;bottom:calc(16px + env(safe-area-inset-bottom))}
+.tour-header #tour-voice {font:inherit;padding:8px 12px}
+@media(max-width:900px) {
+  .workspace .dock input {font-size:16px}
+  .workspace .dock {bottom:calc(8px + env(safe-area-inset-bottom))}
+  .voice-status {max-height:32dvh;overflow:auto;pointer-events:auto}
+}
+@media(max-width:480px) {
+  .in-property-tour .topbar {gap:5px}
+  .in-property-tour .tour-header {gap:6px}
+  .in-property-tour .tour-header :is(a,button) {min-height:44px;font-size:.82rem;padding-inline:8px}
+  .in-property-tour .tour-header > a:first-child {padding-inline:3px}
+}
