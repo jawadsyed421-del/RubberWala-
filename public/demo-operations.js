@@ -86,8 +86,8 @@ export function answerDemo(query,data,scope,{tasks,project}){
     const detail=currency(finance.revenue)+' in revenue less '+currency(finance.expenses)+' in expenses. '+origin;
     return result(timeLabel+' profit',/margin/.test(text)?margin+'%':currency(finance.profit),detail,'finance');
   }
-  if(/revenue|turnover|income|expenses?|spend|costs?|cash flow/.test(text)){
-    const costs=/expenses?|spend|costs?/.test(text);
+  if(/revenue|turnover|income|expenses?|spend|cost(?:ing|s)?|budget|cash flow/.test(text)){
+    const costs=/expenses?|spend|cost(?:ing|s)?|budget/.test(text);
     return result(timeLabel+(costs?' expenses':' revenue'),currency(costs?finance.expenses:finance.revenue),origin,'finance');
   }
   if(/outstanding|receivable|\bowing\b|payments? due/.test(text))return result('Outstanding receivables',currency(data.outstanding),'Booked value less payments received for '+scope+'.','finance');

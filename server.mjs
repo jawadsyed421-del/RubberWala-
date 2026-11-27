@@ -18,6 +18,7 @@ const contentTypes = {
   '.wasm':'application/wasm',
   '.glb':'model/gltf-binary',
   '.webp':'image/webp',
+  '.jpg':'image/jpeg',
   '.png':'image/png',
   '.wav':'audio/wav',
   '.mp3':'audio/mpeg'

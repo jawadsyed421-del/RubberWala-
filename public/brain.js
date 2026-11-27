@@ -5,6 +5,8 @@ import { answerDemo, findRoute, normalizeVoice, operations, demoTasks, demoDocum
 import { cameraCommand } from './site-commands.js';
 import { constructionAnswer, constructionRecord, dateLabel } from './construction-data.js';
 import { hindiAnswer, hindiCommand, hindiProject, isHindi } from './hindi.js';
+import { namedRubberwalaProject, rubberwalaAnswer } from './rubberwala-knowledge.js';
+import { sheetAnswer } from './sheet-knowledge.js';
 import { arrivalPage, mountArrival } from './arrival.js';
 import { cityProjects, tourProjects } from './city-projects.js';
 
@@ -22,6 +24,7 @@ const clean=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;',
 const totals=metrics();
 let scene=null, sceneTicket=0, activeRoute='', activeProject=-1, floor=1, mode='overview', filter=saved('projectFilter',-1), department=0;
 let floorPlanOpen=false;
+let namedQuestionProject=null;
 let interior=null, interiorRequest=0;
 let liveTour=false;
 let stopArrival;
@@ -419,7 +422,7 @@ function jarvis(){
   return heading('Meet rAlix','Ask about the portfolio and see the underlying demo records.')+`
     <div class="jarvis-grid"><section class="glass panel jarvis-identity"><button type="button" class="ralix-globe" id="ralix-globe" aria-label="${conversationActive?'Close rAlix conversation':'Start rAlix conversation'}" aria-pressed="${conversationActive}"><span class="ralix-ring"></span><span class="ralix-ring ralix-ring--outer"></span><span class="ralix-core"><i></i><i></i><i></i></span><span class="ralix-echo"></span></button><h2>rAlix</h2><p>Executive intelligence</p><span class="ralix-session-label">${conversationActive?'Conversation active':'Tap the globe to start'}</span></section>
     <section class="glass panel jarvis-response" aria-live="polite"><h2>${lastAnswer?clean(lastAnswer.title):'Ask the portfolio'}</h2>
-    ${lastAnswer?`<p class="query">${clean(lastAnswer.query)}</p><strong class="display-number">${clean(lastAnswer.value)}</strong><p>${clean(lastAnswer.detail)}</p>${lastAnswer.route?`<a class="button quiet" href="#${lastAnswer.route}">View supporting records ↗</a>`:''}`:'<p>Start with a question about November sales, construction progress, receivables or a building floor.</p>'}
+    ${lastAnswer?`<p class="query">${clean(lastAnswer.query)}</p><strong class="display-number">${clean(lastAnswer.value)}</strong><p>${clean(lastAnswer.detail)}</p>${lastAnswer.source?`<a class="button quiet" href="${clean(lastAnswer.source)}" target="_blank" rel="noopener">Official source ↗</a>`:lastAnswer.route?`<a class="button quiet" href="#${lastAnswer.route}">View supporting records ↗</a>`:''}`:'<p>Start with a question about November sales, construction progress, receivables or a building floor.</p>'}
     <div class="ralix-transcript" id="ralix-transcript" ${replyTranscript?'':'hidden'}><strong>rAlix reply</strong><p lang="${isHindi(replyTranscript)?'hi':'en'}">${clean(replyTranscript)}</p></div>
     <div class="suggestions">${examples.map((q,i)=>`<button data-example="${i}">${q} ↗</button>`).join('')}</div></section></div>`;
 }
@@ -471,7 +474,23 @@ async function runSequence(commands,options){
 const actionResult=message=>({action:true,message});
 function ask(query,options={}){
   const q=query.trim(), normalized=normalizeVoice(q);
+  const namedProject=namedRubberwalaProject(q);
+  if(namedProject)namedQuestionProject=namedProject;
+  const contextFor=part=>{
+    if(/portfolio|all (?:projects|buildings)|पूरे पोर्टफोलियो|सभी प्रोजेक्ट/i.test(part))return null;
+    return namedRubberwalaProject(part)||namedProject||
+      (activeRoute==='property'&&tourProjects[activeProject]?namedRubberwalaProject(tourProjects[activeProject].name):null)||
+      (/^\s*(?:and|what about)\b|^\s*और|\b(?:this|that) (?:building|tower|project)\b|\bthere\b|इस बिल्डिंग|वहाँ/i.test(part)?namedQuestionProject:null);
+  };
   if(isHindi(q)){
+    if(/(?:3\s*डी|3d).*नक्शा|मुंबई.*नक्शा/.test(q)&&/खोल|दिखा/.test(q)){
+      ask('open Mumbai map',options);
+      return actionResult('मुंबई का तीन-आयामी नक्शा खोल रहा हूँ।');
+    }
+    if(namedProject&&/खोल|पर चल|ले चल/.test(q)&&!/फ्लोर प्लान|मंज़िल का नक्शा|मंजिल का नक्शा/.test(q)){
+      ask('open '+namedProject.name,options);
+      return actionResult(namedProject.name+' खोल रहा हूँ।');
+    }
     const command=hindiCommand(q);
     if(command){
       const outcome=ask(command.command,options);
@@ -483,10 +502,10 @@ function ask(query,options={}){
     const project=explicit||projects[activeProject>=0?activeProject:contextProject>=0?contextProject:filter];
     if(explicit){filter=explicit.index;contextProject=explicit.index;}
     const parts=q.split(/\s+और\s+(?=(?:क्या|कब|कितन|कौन|कितनी|कितने))/).filter(Boolean);
-    const answers=parts.map(part=>hindiAnswer(part,{project,tasks}));
+    const answers=parts.map(part=>sheetAnswer(part,{hi:true,named:Boolean(contextFor(part)||explicit)})||rubberwalaAnswer(part,{hi:true,project:contextFor(part),tasks,data:totals})||hindiAnswer(part,{project,tasks}));
     const first=answers[0];
     const detail=[first.detail,...answers.slice(1).map(item=>item.value.replace(/[।?]$/,'')+'। '+item.detail)].join(' ');
-    lastAnswer={query:q,title:answers.length>1?'आपके सवालों के जवाब':first.title,value:first.value,detail,
+    lastAnswer={query:q,title:answers.length>1?'आपके सवालों के जवाब':first.title,value:first.value,detail,source:first.source,
       route:answers.every(item=>item.route===first.route)?first.route:null};
     if(!options.stayOnPage)navigate('ralix');
     else if(activeRoute==='ralix')render();
@@ -512,6 +531,19 @@ function ask(query,options={}){
   }
   const destination=command.match(/^(?:open(?:ing| up)?|show(?: me)?|go (?:back )?(?:to|in|into)|move(?: from .+)? (?:to|into)|fly to|focus on|take me (?:to|into)|navigate (?:to|into)|switch to|bring up|pull up|return to|head to) (?:the )?(.+)$/)?.[1];
   const namedBuilding=tourProjects.find(item=>destination===normalizeVoice(item.name));
+  if(/^(?:property universe 3d|3d property universe|3d map|mumbai map|mumbai 3d map)$/.test(destination||'')){
+    if(activeRoute!=='property')navigate('property');
+    $('#city-title')?.focus();
+    void openCityMap();
+    return actionResult('Opening the Mumbai 3D map.');
+  }
+  if(/^(?:3d floor|interior|walkthrough|floor walkthrough)$/.test(destination||'')){
+    if(activeRoute!=='property'||activeProject<0)return actionResult('Select a building first, then say open the interior.');
+    if(!floorPlanOpen)changeTour('plan');
+    const button=$('[data-interior="open"]');
+    if(button&&!interior){button.focus();void openInterior(button);}
+    return actionResult('Opening the building interior.');
+  }
   if(namedBuilding){
     if(activeRoute!=='property')navigate('property');
     setFocus(namedBuilding.index);
@@ -590,7 +622,7 @@ function ask(query,options={}){
   const scope=project?.name||'the portfolio';
   const match=normalized.match(/(?:floor\s*(\d+)|(\d+)(?:st|nd|rd|th)\s+floor)/);
   let result;
-  if(match){
+  if(match&&!sheetAnswer(q,{named:Boolean(contextFor(q)||matching)})){
     const n=Number(match[1]||match[2]), target=project?tourProjects[project.index]:tourProjects[activeProject];
     if(!target)result={title:'Select a project',value:'Which building?',detail:'Include a building name to open a floor record.'};
     else if(n<1||n>target.floors)result={title:'Floor unavailable',value:target.name,detail:'The demo records contain floors 1 through '+target.floors+'.'};
@@ -624,11 +656,12 @@ function ask(query,options={}){
         (contextual&&projects[contextProject])||project||projects[contextProject];
       const all=/\b(?:all projects|portfolio|all buildings)\b/.test(words);
       const site=all?projects:building?[building]:/this building|this tower|this project/.test(words)?[]:projects;
-      return constructionAnswer(words,site)||answerDemo(part,data,scope,{tasks,project});
+      return sheetAnswer(part,{named:Boolean(contextFor(part)||matching)})||rubberwalaAnswer(part,{project:contextFor(part),tasks,data})||
+        constructionAnswer(words,site)||answerDemo(part,data,scope,{tasks,project});
     });
     result=answers.length===1?answers[0]:{title:'Portfolio answers',value:answers[0].value,
       detail:[answers[0].detail,...answers.slice(1).map(answer=>answer.title+': '+answer.value+'. '+answer.detail)].join(' '),
-      route:answers.every(answer=>answer.route===answers[0].route)?answers[0].route:null};
+      route:answers.every(answer=>answer.route===answers[0].route)?answers[0].route:null,source:answers[0].source};
   }
   if(matching){filter=matching.index;contextProject=matching.index;}
   lastAnswer={query:q,...result};

@@ -1,21 +1,40 @@
-import { randomUUID } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
 export function createVoiceRoutes({apiKey,voiceId='JBFqnCBsd6RMkjVDRZzb',request=fetch}){
   const configured=Boolean(apiKey&&/^[a-zA-Z0-9]{20,32}$/.test(voiceId));
+  const ticketKey=configured?createHash('sha256').update('ralix-voice-ticket-v1\0').update(apiKey).digest():null;
+  const productionHosts=new Set(['ralix.ceo','www.ralix.ceo','rubberwala-seven.vercel.app']);
   const tickets=new Map();
   let streaming=0;
   let tokenInFlight=false;
   const json=(response,status,value)=>response.writeHead(status,{
     'Content-Type':'application/json','Cache-Control':'no-store',
   }).end(JSON.stringify(value));
+  function seal(ticket){
+    const iv=randomBytes(12);
+    const cipher=createCipheriv('aes-256-gcm',ticketKey,iv);
+    const encoded=Buffer.concat([cipher.update(JSON.stringify(ticket),'utf8'),cipher.final()]);
+    return Buffer.concat([iv,cipher.getAuthTag(),encoded]).toString('base64url');
+  }
+  function unseal(token){
+    if(!token||token.length>9000)return null;
+    try{
+      const bytes=Buffer.from(token,'base64url');
+      if(bytes.length<29)return null;
+      const decipher=createDecipheriv('aes-256-gcm',ticketKey,bytes.subarray(0,12));
+      decipher.setAuthTag(bytes.subarray(12,28));
+      return JSON.parse(Buffer.concat([decipher.update(bytes.subarray(28)),decipher.final()]).toString('utf8'));
+    }catch{return null;}
+  }
   return async (pathname,req,res)=>{
     if(!pathname.startsWith('/api/voice/'))return false;
     const host=req.headers.host||'';
-    if(!/^(?:127\.0\.0\.1|localhost)(?::\d+)?$/i.test(host)||
-       (req.headers.origin&&req.headers.origin!=='http://'+host)){
-      json(res,403,{error:'Local access only'});
+    const local=/^(?:127\.0\.0\.1|localhost)(?::\d+)?$/i.test(host);
+    const production=productionHosts.has(host.toLowerCase());
+    if((!local&&!production)||(req.headers.origin&&req.headers.origin!==(local?'http://':'https://')+host)){
+      json(res,403,{error:'Voice unavailable on this origin'});
       return true;
     }
     if(pathname==='/api/voice/status'&&req.method==='GET'){
@@ -75,17 +94,18 @@ export function createVoiceRoutes({apiKey,voiceId='JBFqnCBsd6RMkjVDRZzb',request
           json(res,429,{error:'Voice is busy'});
           return true;
         }
-        const id=randomUUID();
         const locale=['en','hi'].includes(language)?language:/\p{Script=Devanagari}/u.test(text)?'hi':'en';
-        tickets.set(id,{text,locale,expires:now+15000});
+        const ticket={text,locale,expires:now+15000};
+        const id=production?seal(ticket):randomUUID();
+        if(local)tickets.set(id,ticket);
         json(res,201,{url:'/api/voice/stream/'+id});
       }catch{
         if(!res.writableEnded)json(res,400,{error:'Invalid reply'});
       }
       return true;
     }
-    const match=pathname.match(/^\/api\/voice\/stream\/([0-9a-f-]{36})$/);
-    const ticket=match&&tickets.get(match[1]);
+    const match=pathname.match(/^\/api\/voice\/stream\/([a-zA-Z0-9_-]+)$/);
+    const ticket=match&&(production?unseal(match[1]):tickets.get(match[1]));
     if(req.method!=='GET'||!ticket||ticket.expires<Date.now()){
       json(res,404,{error:'Voice stream expired'});
       return true;
