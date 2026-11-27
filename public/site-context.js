@@ -19,7 +19,7 @@ const blocks=[
   [-7.1,12,3.5,2.65,3],[-2.9,12.6,3.1,2.5,4],[3.4,12.6,3.2,2.5,3],
   [13.1,11.4,3.45,2.6,4],[17.4,11.5,3.45,2.5,5],
 ];
-export function createContextBuildings(){
+export function createContextBuildings({lots=blocks}={}){
   const group=new T.Group();
   group.name='Illustrative low-rise buildings';
   const geometry=new T.BoxGeometry(1,1,1);
@@ -38,7 +38,7 @@ export function createContextBuildings(){
     batches.get(material).push(transform.makeScale(width,height,depth).setPosition(x,y,z).clone());
   }
 
-  for(const [index,[x,z,width,depth,floors]] of blocks.entries()){
+  for(const [index,[x,z,width,depth,floors]] of lots.entries()){
     const base=-.24, pitch=.39, height=floors*pitch+.13, top=base+height;
     const bays=Math.round(width*1.55), finish=index%3===0?'stone':'cream';
     box('coping',x,-.28,z,width+.33,.07,depth+.33);

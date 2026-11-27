@@ -5,6 +5,8 @@ import { answerDemo, findRoute, normalizeVoice, operations, demoTasks, demoDocum
 import { cameraCommand } from './site-commands.js';
 import { constructionAnswer, constructionRecord, dateLabel } from './construction-data.js';
 import { hindiAnswer, hindiCommand, hindiProject, isHindi } from './hindi.js';
+import { arrivalPage, mountArrival } from './arrival.js';
+import { cityProjects, tourProjects } from './city-projects.js';
 
 const $=(selector,root=document)=>root.querySelector(selector);
 const view=$('#view');
@@ -19,7 +21,13 @@ const store=(key,value)=>{
 const clean=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const totals=metrics();
 let scene=null, sceneTicket=0, activeRoute='', activeProject=-1, floor=1, mode='overview', filter=saved('projectFilter',-1), department=0;
+let floorPlanOpen=false;
+let interior=null, interiorRequest=0;
+let liveTour=false;
+let stopArrival;
 let sceneReady=Promise.resolve(null);
+let viewerRequested=false;
+let cityScene=null, cityReady=null, citySelection=-1;
 let gestureSession=null;
 let quality=saved('quality','high');
 let tasks=saved('tasks',[]);
@@ -56,10 +64,6 @@ function bars(data){
   return '<div class="chart" role="img" aria-label="'+months.map((month,i)=>month+' '+currency(data.history[i])).join(', ')+'">'+
     data.history.map((n,i)=>`<div title="${months[i]} · ${currency(n)}"><div class="chart-track"><span style="--size:${Math.max(n/peak*100,1)}%"><b>${n.toFixed(0)}</b></span></div><small>${months[i]}</small></div>`).join('')+'</div>';
 }
-$('#hero-card').innerHTML=`<div class="hero-total"><h2>Portfolio intelligence</h2>
- <strong class="hero-value">${currency(totals.value)}</strong><p class="metric-label">Illustrative portfolio value</p></div>
- <div class="hero-trend"><p class="metric-label chart-caption">Monthly booked value</p>${bars(totals)}</div>
- <div class="hero-metrics"><div><strong>${projects.length}</strong><span>Projects</span></div><div><strong>${totals.sold}</strong><span>Units sold</span></div><div><strong>${totals.progress}%</strong><span>Complete</span></div></div>`;
 
 function heading(title,description,actions=''){
   return `<div class="workspace-heading"><div><p class="eyebrow">Rubberwala Brain</p><h1>${title}</h1><p>${description}</p></div>${actions}</div>`;
@@ -96,22 +100,215 @@ function dashboard(route){
     </div><section class="glass panel"><div class="panel-top"><h2>Project breakdown</h2></div>${projectTable(list)}</section>`;
 }
 
+const buildingExteriors=[
+  ['valencia','Valencia','Parel'],
+  ['nebula','Nebula','Khetwadi'],
+  ['white-house','White House','Kala Chowki'],
+  ['fuego','Fuego','Grant Road'],
+  ['platinum-mall','Platinum Mall','Grant Road'],
+  ['eon','EON','Jerbai Wadia Road'],
+];
+const viewerProjects=()=>activeRoute==='property'?tourProjects:projects;
+const exteriorPath=id=>`/building-exteriors/${id}.webp`;
+function buildingGallery(){
+  return `<section class="building-gallery" aria-labelledby="building-gallery-title">
+    <h1 id="building-gallery-title">Property Universe</h1>
+    <p>Explore Rubberwala’s Mumbai buildings. Exterior artwork is illustrative.</p>
+    <button class="button primary building-map-entry" data-city-action="open">Open Property Universe 3D ↓</button>
+    <div class="building-gallery-grid">${buildingExteriors.map(([id,name,location])=>`
+      <button class="building-card" data-building-exterior="${id}" aria-haspopup="dialog">
+        <img src="/building-exteriors/${id}.webp" width="1920" height="1080" alt="" ${id==='valencia'?'fetchpriority="high"':'loading="lazy"'} decoding="async">
+        <span><strong>${name}</strong><small>${location}</small></span><i aria-hidden="true">↗</i>
+      </button>`).join('')}</div>
+  </section>${cityViewer()}<section class="building-gallery model-demo-intro" aria-labelledby="model-demo-title">
+    <h2 id="model-demo-title">Explore buildings</h2>
+    <p>Switch between cinematic exteriors, interactive reconstructions, and illustrative floor-plan concepts.</p>
+  </section>`;
+}
+function cityViewer(){
+  return `<section class="building-gallery city-gallery" aria-labelledby="city-title">
+    <h2 id="city-title" tabindex="-1">Property Universe 3D</h2>
+    <p>Explore reconstructed landmarks on a schematic Mumbai waterfront map.</p>
+    <div class="city-stage">
+      <div class="scene" id="city-scene" aria-label="Interactive 3D map"></div>
+      <div class="city-hud"><div id="city-selection"><strong>Mumbai portfolio</strong><span>Six architectural reconstructions</span></div>
+      <div class="city-camera" aria-label="Map camera"><button class="button quiet" data-city-action="overhead">Overhead</button><button class="button quiet" data-city-action="reset">Reset map</button></div></div>
+      <button class="button primary city-launch" data-city-action="open">Load the 3D map</button>
+      <p id="city-status" role="status">Drag to orbit · Scroll to zoom · Select a building to get closer</p>
+    </div>
+    <div class="city-picker" aria-label="Find a building">${cityProjects.map(({index,name,area})=>
+      `<button data-city-index="${index}" aria-pressed="false"><strong>${name}</strong><span>${area}</span></button>`).join('')}</div>
+  </section>`;
+}
+async function openCityMap(){
+  if(cityReady)return cityReady;
+  const host=$('#city-scene'),status=$('#city-status');
+  if(!host||activeRoute!=='property')return;
+  host.parentElement.dataset.state='loading';
+  status.textContent='Loading the Mumbai models…';
+  cityReady=(async()=>{
+    try{
+      const {createScene}=await import('./scene.js');
+      if(!host.isConnected)return null;
+      cityScene=createScene(host,{catalog:cityProjects,quality,onSelect:index=>void selectCity(index)});
+      if(!cityScene)throw new Error('WebGL unavailable');
+      const controller=cityScene;
+      await controller.show(-1);
+      if(!host.isConnected)return null;
+      if(host.classList.contains('scene-failed'))throw new Error('Models unavailable');
+      host.parentElement.dataset.state='ready';
+      status.textContent='Drag to orbit · Scroll to zoom · Select a building to get closer';
+      return controller;
+    }catch{
+      if(host.isConnected){
+        cityScene?.dispose();cityScene=null;cityReady=null;
+        host.parentElement.dataset.state='failed';
+        status.textContent='The 3D map could not load. You can still view and download the building artwork above.';
+      }
+      return null;
+    }
+  })();
+  return cityReady;
+}
+async function selectCity(index){
+  citySelection=index;
+  const project=cityProjects[index];
+  const summary=$('#city-selection');
+  if(!summary)return;
+  summary.innerHTML=project?`<strong>${project.name}</strong><span>${project.area} · ${project.source}</span><a href="${project.path}" download>Download GLB</a><button class="button quiet" data-explore-building="${project.id}">Explore building</button>`:
+    '<strong>Mumbai portfolio</strong><span>Six architectural reconstructions</span>';
+  for(const button of view.querySelectorAll('[data-city-index]'))button.setAttribute('aria-pressed',String(Number(button.dataset.cityIndex)===index));
+  const controller=await openCityMap();
+  if(controller&&cityScene===controller&&citySelection===index)await controller.show(index,true);
+}
 function property(showroom=false){
-  const p=projects[activeProject];
+  const p=viewerProjects()[activeProject];
   const title=showroom?'Customer Showroom':'Property Universe';
   const text=showroom?'Explore the architecture and illustrative availability.':'Orbit the portfolio and select a building to inspect its project records.';
-  return heading(title,text,`<div class="heading-actions"><a class="button quiet" href="/models.html">Model library ↗</a><label>Rendering <select id="quality"><option value="high">High</option><option value="performance" ${quality==='performance'?'selected':''}>Performance</option></select></label></div>`)+
-    `<div class="property-grid"><div class="glass property-stage">
+  return (showroom?heading(title,text):buildingGallery())+
+    `<div class="property-grid ${showroom?'':'property-tour'}"><div class="glass property-stage">
     <div class="scene scene-poster" id="property-scene" aria-label="Interactive building models"></div>
     <span class="gesture-pointer" id="gesture-pointer" aria-hidden="true" hidden></span>
     <video id="gesture-video" class="gesture-video" aria-label="Mirrored gesture camera preview" autoplay muted playsinline hidden></video>
-    <div class="stage-top"><span>${p?clean(p.name):'Portfolio view'}</span><button class="button primary" id="gesture-toggle" aria-pressed="false" aria-controls="gesture-status">Enable hand gestures</button><small id="scene-status" role="status"></small></div>
+    <div class="stage-top"><span>${p?clean(p.name):'Portfolio view'}</span><button class="button quiet" id="gesture-toggle" aria-pressed="false" aria-controls="gesture-status">Enable hand gestures</button><small id="scene-status" role="status"></small></div>
     <p id="gesture-status" role="status" hidden></p>
+    ${showroom?'':`<div class="tour-render" aria-hidden="true"></div><div id="tour-plan" class="tour-plan" hidden><img fetchpriority="low" alt=""><div id="interior-view" class="interior-view" hidden></div><div id="interior-controls" class="interior-controls" hidden></div><p id="interior-status" class="interior-status" role="status" hidden></p></div>
+    <div id="tour-copy" class="tour-copy">${tourCopy()}</div>
+    <div id="tour-levels" class="tour-levels"></div>
+    <span class="tour-render-caption">Illustrative rendering</span>
+    <button class="button quiet tour-view-toggle" data-tour-view>3D view</button>
+    <span id="tour-level-marker" class="tour-level-marker" aria-hidden="true" hidden></span>`}
     <div class="stage-bottom"><span>Drag to orbit · Scroll to zoom</span><div><button class="button quiet" data-zoom="1.13" aria-label="Zoom out">−</button><button class="button quiet" data-zoom=".88" aria-label="Zoom in">+</button><button class="button quiet" data-reset>Reset view</button></div></div>
-    </div><aside class="glass panel inspector" id="inspector">${inspector(showroom)}</aside></div>
+    </div>${showroom?'':`<nav class="tour-chapters" id="tour-chapters" aria-label="Property tour">${tourChapters()}</nav>`}<aside class="glass panel inspector" id="inspector">${inspector(showroom)}</aside></div>
+    <div class="tour-resources heading-actions"><a class="button quiet" href="/models.html">Model library ↗</a><label>Rendering <select id="quality"><option value="high">High</option><option value="performance" ${quality==='performance'?'selected':''}>Performance</option></select></label></div>
     <section class="glass panel gesture-guide"><div><h2>Hand controls</h2><p>Turn on the camera in the 3D view. Pinch to grab, raise your hand to lift, or move sideways to carry. Open your palm to separate the building and make a fist to put it back together.</p></div><div class="actions"><button class="button quiet" data-structure="expand">Separate</button><button class="button quiet" data-structure="restore">Reassemble</button></div></section>`;
 }
+function tourCopy(){
+  const project=tourProjects[activeProject];
+  if(!project)return `<h2 class="tour-title" tabindex="-1">Property<br>Universe</h2><p>Explore the Rubberwala portfolio</p><button class="button primary" data-tour="tower">Explore the neighborhood <span aria-hidden="true">→</span></button>`;
+  if(floorPlanOpen)return `<h2 class="tour-title" tabindex="-1">Level ${floor}</h2><h2>${project.name}</h2><p>Illustrative ${project.id==='platinum-mall'?'retail':'residence'} layout · building concept</p><div class="tour-actions"><button class="button primary" data-interior="open">Enter 3D floor</button><button class="button quiet" data-tour="tower">Back to tower</button></div>`;
+  return `<h2 class="tour-title" tabindex="-1">${project.name}</h2><p>${project.area} · Select an illustrative level</p><div class="tour-actions"><label class="sr" for="tour-floor">Select a level</label><select id="tour-floor">${Array.from({length:project.floors},(_,i)=>i+1).map(level=>`<option value="${level}" ${floor===level?'selected':''}>Level ${level}</option>`).join('')}</select><button class="button primary" data-tour="plan">View floor plan</button></div>`;
+}
+function tourChapters(){
+  const stage=floorPlanOpen?'plan':activeProject>=0?'tower':'neighborhood';
+  return [['neighborhood','Neighborhood'],['tower','Tower'],['plan','Floor plan']].map(([id,label])=>
+    `<button data-tour="${id}" ${id===stage?'aria-current="step"':''} ${id==='plan'&&activeProject<0?'disabled':''}>${label}</button>`).join('');
+}
+function renderTour(updateCopy=true){
+  const copy=$('#tour-copy');
+  if(!copy)return;
+  if(updateCopy)copy.innerHTML=tourCopy();
+  $('#tour-chapters').innerHTML=tourChapters();
+  const plan=$('#tour-plan');
+  if(!floorPlanOpen)closeInterior();
+  plan.hidden=!floorPlanOpen;
+  const stage=copy.closest('.property-stage');
+  stage.dataset.chapter=floorPlanOpen?'plan':activeProject>=0?'tower':'neighborhood';
+  stage.classList.toggle('is-cinematic',!liveTour&&!floorPlanOpen);
+  const toggle=stage.querySelector('[data-tour-view]');
+  toggle.hidden=floorPlanOpen;
+  toggle.textContent=liveTour?'Cinematic view':'3D view';
+  const canvas=$('#property-scene');
+  canvas.inert=floorPlanOpen||!liveTour;
+  const project=tourProjects[activeProject];
+  if(floorPlanOpen&&project){
+    const image=plan.querySelector('img');
+    image.src=`/tour-floor-plans/${project.id}.webp`;
+    image.alt=`Illustrative furnished floor-plan cutaway for ${project.name}`;
+  }
+  const levels=$('#tour-levels');
+  levels.hidden=!project||floorPlanOpen;
+  if(project&&!floorPlanOpen){
+    levels.style.setProperty('--level-position',100*(project.floors-floor)/(project.floors-1)+'%');
+    levels.innerHTML=`<label class="sr" for="tour-level-slider">Tower level</label><input id="tour-level-slider" type="range" min="1" max="${project.floors}" value="${floor}"><span class="tour-level-number" aria-hidden="true">${floor}</span>`;
+  }
+  stage.style.setProperty('--tower-poster',project?`url('${exteriorPath(project.id)}')`:'none');
+  scene?.showLevel(floorPlanOpen||mode!=='inventory'?null:floor);
+}
+function closeInterior(){
+  interiorRequest++;
+  interior?.dispose();
+  interior=null;
+  const plan=$('#tour-plan');
+  if(!plan)return;
+  plan.closest('.property-stage').classList.remove('in-interior');
+  $('#interior-view').hidden=true;
+  $('#interior-controls').hidden=true;
+  $('#interior-status').hidden=true;
+}
+async function openInterior(button){
+  const project=tourProjects[activeProject], host=$('#interior-view'), status=$('#interior-status'), controls=$('#interior-controls');
+  if(!project||!host||!floorPlanOpen)return;
+  const request=++interiorRequest;
+  button.disabled=true;
+  status.hidden=false;
+  status.textContent='Opening the 3D interior…';
+  try{
+    const {createInterior}=await import('./interior-tour.js');
+    if(request!==interiorRequest||!host.isConnected||!floorPlanOpen)return;
+    host.hidden=false;
+    interior=createInterior(host,project.id,{onRoomChange:(index,name)=>{
+      const label=$('#interior-room');
+      if(label)label.textContent=name;
+      controls.dataset.interiorMode=index===-2?'overview':'walk';
+      for(const item of controls.querySelectorAll('[data-interior-room]')){
+        item.setAttribute('aria-pressed',String(Number(item.dataset.interiorRoom)===index));
+      }
+    }});
+    const rooms=[{name:'3D cutaway',index:-2},...interior.rooms.map((name,index)=>({name,index}))];
+    controls.innerHTML=`<div class="interior-header"><div><strong>${project.name} · Level ${floor}</strong><span id="interior-room" aria-live="polite">3D cutaway</span></div>
+      <button class="button quiet" data-interior="close">Back to floor plan</button></div>
+      <div class="interior-navigation"><div class="interior-steps" aria-label="Walk controls"><button class="button quiet" data-interior="back">Walk back</button><button class="button quiet" data-interior="forward">Walk forward</button></div>
+      <p class="interior-orbit-help">Drag to orbit. Select a room to enter.</p><p class="interior-walk-help">Drag to look around. Use W A S D to walk.</p><div class="interior-rooms" aria-label="Rooms">${rooms.map(({name,index})=>`<button data-interior-room="${index}" aria-pressed="${index===-2}">${name}</button>`).join('')}</div></div>`;
+    host.closest('.property-stage').classList.add('in-interior');
+    controls.hidden=false;
+    status.hidden=true;
+    host.querySelector('canvas')?.focus({preventScroll:true});
+  }catch{
+    if(request!==interiorRequest)return;
+    host.hidden=true;
+    status.textContent='Interactive 3D is unavailable. The floor-plan image is still available.';
+  }finally{
+    if(button.isConnected)button.disabled=false;
+  }
+}
+function changeTour(chapter,focus=false){
+  if(chapter==='neighborhood')setFocus(-1);
+  else if(chapter==='tower'&&activeProject<0)setFocus(0);
+  else if(activeProject>=0){
+    floorPlanOpen=chapter==='plan';
+    if(floorPlanOpen){stopGestures();mode='inventory';}
+    renderInspector();
+  }
+  if(focus)$('#tour-copy .tour-title')?.focus();
+}
 function inspector(showroom=false){
+  if(!showroom){
+    const current=tourProjects[activeProject];
+    return `<div class="inspector-title"><h2>Select a building</h2><span>${tourProjects.length} reconstructions</span></div>
+      <div class="project-picker">${tourProjects.map(project=>`<button data-focus="${project.index}" aria-pressed="${current===project}"><img class="model-preview" src="${exteriorPath(project.id)}" alt="" loading="lazy"><span><strong>${project.name}</strong><small>${project.area}</small></span><span aria-hidden="true">↗</span></button>`).join('')}</div>
+      ${current?`<p class="muted">${current.source} · Floors and layouts are illustrative.</p><a class="button quiet" href="${current.path}" download>Download model ↓</a>`:''}`;
+  }
   const p=projects[activeProject];
   if(!p) return `<div class="inspector-title"><h2>Explore buildings</h2><span>${projects.length} models</span></div><div class="project-picker">${projects.map(project=>`<button data-focus="${project.index}">${modelPreview(project)}<span><strong>${project.name}</strong><small>${project.form}</small></span><span aria-hidden="true">↗</span></button>`).join('')}</div>`;
   const data=metrics([p]), level=p.levels[floor-1];
@@ -129,17 +326,25 @@ function renderInspector(){
   const element=$('#inspector');
   if(element)element.innerHTML=inspector(activeRoute==='showroom');
   const label=$('.stage-top > span');
-  if(label)label.textContent=projects[activeProject]?.name||'Portfolio view';
+  if(label)label.textContent=viewerProjects()[activeProject]?.name||'Portfolio view';
+  renderTour();
 }
-function setFocus(index,fromFloor){
+function setFocus(index,fromFloor,keepView=false){
   activeProject=index;
-  if(index>=0)contextProject=index;
-  floor=fromFloor||1;
+  floorPlanOpen=false;
+  if(index>=0&&index<projects.length)contextProject=index;
+  if(!keepView&&activeRoute==='property')liveTour=false;
+  const selected=viewerProjects()[index];
+  floor=selected?Math.min(fromFloor||(activeRoute==='property'?18:1),selected.floors):1;
   mode=fromFloor?'inventory':'overview';
   renderInspector();
   if(scene){
     const controller=scene;
-    sceneReady=controller.show(index,true).then(()=>scene===controller?controller:null);
+    sceneReady=controller.show(index,true).then(()=>{
+      if(scene!==controller)return null;
+      controller.showLevel(mode==='inventory'&&!floorPlanOpen?floor:null);
+      return controller;
+    });
   }
 }
 function stopGestures(){
@@ -238,6 +443,8 @@ async function runCamera(command){
     navigate('property');
   }else if(focus>=0&&focus!==activeProject)setFocus(focus);
   else if(returnToOverview)setFocus(-1);
+  if(floorPlanOpen)changeTour('tower');
+  if(activeRoute==='property'&&command.action!=='stop'){liveTour=true;renderTour(false);ensurePropertyViewer();}
   const controller=await sceneReady;
   if(controller&&(returnToOverview||focus>=0))await controller.whenStill();
   if(!controller||scene!==controller||document.querySelector('#property-scene')?.classList.contains('scene-poster'))
@@ -304,8 +511,25 @@ function ask(query,options={}){
     return runCamera(action).then(actionResult);
   }
   const destination=command.match(/^(?:open(?:ing| up)?|show(?: me)?|go (?:back )?(?:to|in|into)|move(?: from .+)? (?:to|into)|fly to|focus on|take me (?:to|into)|navigate (?:to|into)|switch to|bring up|pull up|return to|head to) (?:the )?(.+)$/)?.[1];
+  const namedBuilding=tourProjects.find(item=>destination===normalizeVoice(item.name));
+  if(namedBuilding){
+    if(activeRoute!=='property')navigate('property');
+    setFocus(namedBuilding.index);
+    return actionResult('Opening '+namedBuilding.name+'.');
+  }
+  if(destination==='floor plan'||destination?.startsWith('floor plan ')){
+    const legacy=projects.find(item=>destination.includes(normalizeVoice(item.name)));
+    const target=tourProjects.find(item=>destination.includes(normalizeVoice(item.name)))||tourProjects[legacy?.index]||tourProjects[activeProject]||tourProjects[contextProject];
+    if(!target)return actionResult('Section not found. Select a tower to open its floor plan.');
+    const level=Number(destination.match(/\b(?:level|floor) (\d+)\b/)?.[1]|| (activeProject===target.index?floor:1));
+    if(level<1||level>target.floors)return actionResult('Floor not found. This tower has '+target.floors+' levels.');
+    if(activeRoute!=='property')navigate('property');
+    if(activeProject!==target.index||floor!==level)setFocus(target.index,level);
+    changeTour('plan');
+    return actionResult('Showing the illustrative floor plan for level '+level+' of '+target.name+'.');
+  }
   if(destination&&/^(?:this|that|current) (?:building|tower|project)$/.test(destination)){
-    const project=projects[contextProject];
+    const project=activeRoute==='property'?tourProjects[activeProject]||tourProjects[contextProject]:projects[contextProject];
     if(!project)return 'Which building should I open?';
     if(!['property','showroom'].includes(activeRoute))navigate('property');
     setFocus(project.index);
@@ -367,12 +591,12 @@ function ask(query,options={}){
   const match=normalized.match(/(?:floor\s*(\d+)|(\d+)(?:st|nd|rd|th)\s+floor)/);
   let result;
   if(match){
-    const n=Number(match[1]||match[2]), target=project||projects[activeProject];
+    const n=Number(match[1]||match[2]), target=project?tourProjects[project.index]:tourProjects[activeProject];
     if(!target)result={title:'Select a project',value:'Which building?',detail:'Include a building name to open a floor record.'};
     else if(n<1||n>target.floors)result={title:'Floor unavailable',value:target.name,detail:'The demo records contain floors 1 through '+target.floors+'.'};
     else{
       lastAnswer={query:q,title:'Floor intelligence',value:'Floor '+n,detail:target.name+' · illustrative floor records.',route:'property'};
-      navigate('property');
+      if(activeRoute!=='property')navigate('property');
       setFocus(target.index,n);
       return actionResult('Showing floor '+n+' of '+target.name+'.');
     }
@@ -463,27 +687,38 @@ function admin(route){
 
 function render(){
   stopGestures();
+  closeInterior();
+  cityScene?.dispose();
+  cityScene=null;cityReady=null;citySelection=-1;
+  stopArrival?.();
+  stopArrival=null;
   const hash=location.hash.slice(1);
   const route=hash==='jarvis'?'ralix':(hash||'home');
   const known=['home','command','property','ralix','workforce','insights','sales','construction','finance','operations','documents','tasks','approvals','integrations','showroom'];
   activeRoute=known.includes(route)?route:'home';
-  const home=activeRoute==='home';
-  $('#home').hidden=!home;
-  $('#workspace').hidden=home;
+  if(activeRoute==='showroom'&&activeProject>=projects.length){activeProject=-1;floor=1;mode='overview';}
+  const selected=viewerProjects()[activeProject];
+  if(selected)floor=Math.min(floor,selected.floors);
+  document.body.classList.toggle('in-arrival',activeRoute==='home');
+  document.body.classList.toggle('in-property-tour',activeRoute==='property'||activeRoute==='home');
+  if(activeRoute!=='property')liveTour=false;
+  if(activeRoute!=='property'||activeProject<0)floorPlanOpen=false;
   for(const item of document.querySelectorAll('.sidebar a,.topnav a')){
     if(item.hash==='#'+activeRoute)item.setAttribute('aria-current','page');
     else item.removeAttribute('aria-current');
   }
   if(scene){scene.dispose();scene=null;}
   sceneReady=Promise.resolve(null);
+  viewerRequested=false;
   const token=++sceneTicket;
-  if(home){
-    mountScene($('#hero-scene'),true,token);
-  }else{
-    if(['command','sales','construction','finance'].includes(activeRoute))view.innerHTML=dashboard(activeRoute);
+  if(activeRoute==='home'){
+    view.innerHTML=arrivalPage();
+    stopArrival=mountArrival(view);
+  }else if(['command','sales','construction','finance'].includes(activeRoute))view.innerHTML=dashboard(activeRoute);
     else if(['property','showroom'].includes(activeRoute)){
       view.innerHTML=property(activeRoute==='showroom');
-      sceneReady=mountScene($('#property-scene'),false,token);
+      renderTour(false);
+      if(activeRoute==='showroom'||liveTour){viewerRequested=true;sceneReady=mountScene($('#property-scene'),token);}
     }else if(activeRoute==='ralix'){
       view.innerHTML=jarvis();
       paintRalix();
@@ -495,19 +730,27 @@ function render(){
       const status=$('#tts-provider');
       void voiceProvider().then(provider=>{status.textContent=provider==='elevenlabs'?'ElevenLabs configured':'Browser voice · ElevenLabs unconfigured';});
     }
-    document.title=$('h1',view).textContent+' | Rubberwala Brain';
-  }
-  if(home)document.title='Rubberwala Brain | Executive Edition';
+  document.title=(activeRoute==='property'?'Property Universe':$('h1',view).textContent)+' | Rubberwala Brain';
 }
-async function mountScene(host,hero,token){
+function ensurePropertyViewer(){
+  if(activeRoute!=='property'||viewerRequested)return;
+  const host=$('#property-scene');
+  if(!host)return;
+  viewerRequested=true;
+  sceneReady=mountScene(host,sceneTicket);
+}
+async function mountScene(host,token){
   const status=$('#scene-status');
-  if(!hero&&status)status.textContent='Loading models…';
+  if(status)status.textContent='Loading models…';
   try{
     const {createScene}=await import('./scene.js');
     if(token!==sceneTicket)return;
-    scene=createScene(host,{hero,quality,onSelect:index=>setFocus(index)});
-    await scene?.show(hero?-1:activeProject);
+    const propertyTour=activeRoute==='property';
+    scene=createScene(host,{quality,tour:propertyTour,marker:$('#tour-level-marker'),
+      catalog:propertyTour?tourProjects:null,isolateSelected:propertyTour,onSelect:index=>setFocus(index,undefined,true)});
+    await scene?.show(activeProject);
     if(token!==sceneTicket)return;
+    scene?.showLevel(mode==='inventory'&&!floorPlanOpen?floor:null);
     if(status)status.textContent=!scene||host.classList.contains('scene-failed')?'3D unavailable · use building list':'';
     return scene;
   }catch{
@@ -564,12 +807,48 @@ document.addEventListener('click',event=>{
   const b=event.target.closest('button');
   if(!b)return;
   const data=b.dataset;
+  if(data.interior){
+    if(data.interior==='open')void openInterior(b);
+    else if(data.interior==='close'){closeInterior();$('[data-interior="open"]')?.focus();}
+    else interior?.move(data.interior==='forward'?.46:-.46);
+    return;
+  }
+  if(data.interiorRoom!==undefined){interior?.visit(Number(data.interiorRoom));return;}
   if(data.metric)open(`<h2>${metricNames[data.metric]}</h2><strong class="display-number">${fmt(data.metric,metrics(selectedList()))}</strong>${projectTable(selectedList())}`);
+  else if(data.exploreBuilding){
+    const project=tourProjects.find(item=>item.id===data.exploreBuilding);
+    dialog.close();
+    setFocus(project.index);
+    $('#tour-copy .tour-title')?.focus();
+  }
+  else if(data.cityIndex!==undefined){void selectCity(Number(data.cityIndex));}
+  else if(data.cityAction==='open'){
+    $('#city-title')?.focus();
+    void openCityMap();
+  }
+  else if(data.cityAction==='reset'){void selectCity(-1);}
+  else if(data.cityAction==='overhead'){
+    void openCityMap().then(controller=>{if(controller===cityScene)controller?.top();});
+  }
+  else if(data.buildingExterior){
+    const [id,name,location]=buildingExteriors.find(([id])=>id===data.buildingExterior);
+    open(`<div class="building-preview"><h2>${name}</h2><p>${location}, Mumbai · Illustrative exterior</p><img src="${exteriorPath(id)}" width="1920" height="1080" alt="Illustrative exterior of ${name}"><div class="actions"><button class="button primary" data-explore-building="${id}">Explore building</button><a class="button quiet" download href="${exteriorPath(id)}">Download image ↓</a></div></div>`);
+  }
+  else if(data.tourView!==undefined){
+    if(liveTour)stopGestures();
+    liveTour=!liveTour;
+    renderTour(false);
+    if(liveTour)ensurePropertyViewer();
+  }
+  else if(data.tour)changeTour(data.tour,true);
   else if(data.project!==undefined){
     dialog.close();
     navigate('property');
     setFocus(Number(data.project));
-  }else if(data.focus!==undefined)setFocus(Number(data.focus));
+  }else if(data.focus!==undefined){
+    setFocus(Number(data.focus));
+    $('#tour-copy .tour-title')?.focus();
+  }
   else if(data.mode){mode=data.mode;renderInspector();}
   else if(data.zoom)scene?.zoom(Number(data.zoom));
   else if(data.reset!==undefined)scene?.reset();
@@ -598,6 +877,8 @@ window.addEventListener('pagehide',stopGestures);
 document.addEventListener('change',event=>{
   if(event.target.id==='global-project'){filter=Number(event.target.value);store('projectFilter',filter);render();$('#global-project')?.focus();}
   else if(event.target.id==='floor'){floor=Number(event.target.value);renderInspector();$('#floor')?.focus();}
+  else if(event.target.id==='tour-floor'){floor=Number(event.target.value);mode='inventory';renderInspector();$('#tour-floor')?.focus();}
+  else if(event.target.id==='tour-level-slider'){floor=Number(event.target.value);mode='inventory';renderInspector();$('#tour-level-slider')?.focus();}
   else if(event.target.id==='quality'){quality=event.target.value;store('quality',quality);render();}
 });
 document.addEventListener('submit',event=>{
@@ -724,7 +1005,6 @@ document.addEventListener('keydown',event=>{
   if(event.key==='Escape'&&presenting>=0&&!dialog.open)present(-1);
   if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='k'){
     event.preventDefault();
-    if(activeRoute==='home')navigate('ralix');
     $('#dock-query').focus();
   }
 });

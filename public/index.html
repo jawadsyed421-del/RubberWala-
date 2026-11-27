@@ -2,7 +2,7 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#10100f"><title>Rubberwala Brain | Executive Edition</title>
-<link rel="stylesheet" href="/glass.css"><link rel="stylesheet" href="/brain.css"><link rel="stylesheet" href="/brand.css"><link rel="stylesheet" href="/executive-ui.css">
+<link rel="stylesheet" href="/glass.css"><link rel="stylesheet" href="/brain.css"><link rel="stylesheet" href="/brand.css"><link rel="stylesheet" href="/executive-ui.css"><link rel="stylesheet" href="/property-tour.css"><link rel="stylesheet" href="/arrival.css">
 <script type="importmap">{"imports":{"three":"/vendor/build/three.module.js"}}</script>
 <script type="module" src="/brain.js"></script>
 </head><body>
@@ -11,25 +11,11 @@
  <nav aria-label="Main navigation" class="topnav">
   <a href="#command">Command Centre</a><a href="#property">Property Universe</a><a href="#ralix">Ralix</a>
  </nav>
+ <nav class="tour-header" aria-label="Property Universe"><a href="#command">Portfolio</a><a class="button quiet" href="#ralix">Ask Ralix</a></nav>
  <div class="head-actions"><span class="demo"><i></i>Executive Demo <span>Illustrative Data</span></span><button id="hands-free" class="button quiet hands-free" type="button" aria-pressed="false" data-voice-state="off"><span class="mic-dot" aria-hidden="true"></span><span id="hands-free-label">Hands-free</span></button><button id="present" class="button quiet">Presentation <span aria-hidden="true">↗</span></button><button id="menu" class="button quiet" aria-label="Toggle navigation" aria-expanded="false">Menu</button></div>
 </header>
 <main id="app">
- <section id="home" class="page hero">
-  <div class="hero-main">
-   <div class="hero-copy">
-    <p class="eyebrow">Rubberwala Group <span></span> Executive Edition</p>
-    <h1>Intelligence behind <em>every landmark.</em></h1>
-    <p class="intro">Explore the portfolio, track performance and ask Ralix for the numbers behind every project.</p>
-    <div class="actions"><a class="button primary" href="#command">Enter Command Centre <span aria-hidden="true">↗</span></a><a class="button quiet" href="#ralix">Meet Ralix <span aria-hidden="true">↗</span></a></div>
-   </div>
-   <figure class="hero-visual">
-    <div class="hero-stage" aria-hidden="true"><div id="hero-scene" class="scene scene-poster"></div></div>
-    <figcaption><div><strong>Property Universe</strong><span>4 architectural models</span></div><a class="button quiet" href="#property">Explore in 3D <span aria-hidden="true">↗</span></a></figcaption>
-   </figure>
-  </div>
-  <article class="glass hero-card" id="hero-card" aria-label="Portfolio intelligence"></article>
- </section>
- <section class="page workspace" id="workspace" hidden>
+ <section class="page workspace" id="workspace">
   <aside class="sidebar">
    <nav aria-label="Executive workspace">
     <p>Intelligence</p><a href="#command">Command Centre</a><a href="#property">Property Universe</a><a href="#ralix">Ralix</a><a href="#workforce">AI Brain Map</a><a href="#insights">AI Insights</a>

@@ -1,9 +1,9 @@
-import { createContextBuildings } from './site-context.js';
 import * as T from 'three';
 import { GLTFLoader } from './vendor/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from './vendor/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from './vendor/examples/jsm/environments/RoomEnvironment.js';
-import { projects } from './data.js';
+import { projects as demoProjects } from './data.js';
+import { createMumbaiMap } from './mumbai-map.js';
 
 const loader=new GLTFLoader();
 const assets=new Map();
@@ -19,7 +19,9 @@ function asset(project){
 const locations=[[-11,0,2],[-5,0,-11],[15,0,-7],[8,0,8]];
 const reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-export function createScene(host,{hero=false,onSelect=()=>{},quality='high'}={}){
+export function createScene(host,{hero=false,tour=false,marker=null,onSelect=()=>{},quality='high',catalog=null,isolateSelected=false}={}){
+  const projects=catalog||demoProjects;
+  const visibleProject=index=>Boolean(catalog&&!isolateSelected)||current<0||index===current;
   let renderer;
   try { renderer=new T.WebGLRenderer({antialias:true,alpha:true}); }
   catch {
@@ -28,7 +30,8 @@ export function createScene(host,{hero=false,onSelect=()=>{},quality='high'}={})
   }
   const night=hero;
   const scene=new T.Scene();
-  scene.fog=new T.FogExp2(night?0x100e0b:0x141411,night?.013:.009);
+  scene.fog=new T.FogExp2(catalog?0x243d42:tour?0x483328:night?0x100e0b:0x141411,catalog?.005:tour?.009:night?.013:.009);
+  if(catalog)scene.background=new T.Color(0x243d42);
   const camera=new T.PerspectiveCamera(hero?34:41,1,.1,140);
   renderer.setPixelRatio(Math.min(devicePixelRatio,quality==='performance'?1:1.5));
   renderer.toneMapping=T.ACESFilmicToneMapping;
@@ -46,17 +49,18 @@ export function createScene(host,{hero=false,onSelect=()=>{},quality='high'}={})
   room.dispose();
   pmrem.dispose();
   scene.add(new T.HemisphereLight(0xc3cbd7,0x6a5240,night?.65:1.25));
-  const sun=new T.DirectionalLight(0xffe4bf,night?2.2:2.8);
-  sun.position.set(-4,14,8);
+  const sun=new T.DirectionalLight(tour?0xffcb91:0xffe4bf,night?2.2:2.8);
+  sun.position.set(...(tour?[12,10,-2]:[-4,14,8]));
   sun.castShadow=renderer.shadowMap.enabled;
   sun.shadow.mapSize.set(1024,1024);
-  Object.assign(sun.shadow.camera,{left:-24,right:24,top:24,bottom:-24,far:60});
+  const shadowExtent=catalog?48:24;
+  Object.assign(sun.shadow.camera,{left:-shadowExtent,right:shadowExtent,top:shadowExtent,bottom:-shadowExtent,far:catalog?112:60});
   sun.shadow.normalBias=.045;
   scene.add(sun);
   const rim=new T.DirectionalLight(0x9bb5d8,night?1.6:.95);
   rim.position.set(8,12,-10);
   scene.add(rim);
-  const ground=new T.Mesh(new T.PlaneGeometry(230,230),new T.MeshStandardMaterial({color:night?0x211b14:0x24211c,roughness:.83}));
+  const ground=new T.Mesh(new T.PlaneGeometry(230,230),new T.MeshStandardMaterial({color:catalog?0x193943:night?0x211b14:0x24211c,roughness:.83}));
   ground.rotation.x=-Math.PI/2;
   ground.position.y=-.31;
   ground.receiveShadow=true;
@@ -85,6 +89,11 @@ export function createScene(host,{hero=false,onSelect=()=>{},quality='high'}={})
   tile(1.7,10,15,-3.9,paving,-.303);
   tile(1.7,6,8,5.9,paving,-.303);
   scene.add(site);
+  const city=catalog?createMumbaiMap(projects):null;
+  if(city){
+    site.visible=false;
+    scene.add(city.group);
+  }
   const platformMaterial=new T.MeshStandardMaterial({color:0x38322b,roughness:.75,metalness:.22});
   const edgeMaterial=new T.MeshStandardMaterial({color:0x826c53,roughness:.46,metalness:.47});
   const content=new T.Group();
@@ -113,14 +122,49 @@ export function createScene(host,{hero=false,onSelect=()=>{},quality='high'}={})
   face.position.z=.116;
   sign.add(frameMesh,face);
   monument.add(podium,reveal,sign);
-  const context=createContextBuildings();
-  scene.add(monument,context.group);
+  scene.add(monument);
+  const landscaping=new T.Group();
+  if(tour&&!catalog){
+    const trees=[[-3,1.2],[-3,-1.3],[3,1.2],[3,-1.3],[-13,3.4],[-11,3.8],[-6,3.8],[-3,4],[.3,4.1],
+      [3.8,4.2],[6.3,4.1],[11.2,4.2],[13.4,3.8],[16.3,3.9],[-12,-3.8],[-7.4,-3.7],[-1.8,-4.4],[2.1,-4.2],
+      [7,-4.5],[9.6,-4.1],[13.3,-3.6],[18.2,-2.3],[-11,10.3],[-6,10.1],[-1,10.2],[4.9,10.4],[11.4,10.6]];
+    const trunks=new T.InstancedMesh(new T.CylinderGeometry(.055,.08,.66,7),
+      new T.MeshStandardMaterial({color:0x55412e}),trees.length);
+    const crowns=new T.InstancedMesh(new T.IcosahedronGeometry(.48,1),
+      new T.MeshStandardMaterial({color:0x738054,roughness:.9}),trees.length);
+    const transform=new T.Matrix4();
+    for(const [i,[x,z]] of trees.entries()){
+      const scale=.72+(i%5)*.12;
+      trunks.setMatrixAt(i,transform.makeScale(scale,scale,scale).setPosition(x,scale*.33-.3,z));
+      crowns.setMatrixAt(i,transform.makeScale(scale,scale*1.14,scale).setPosition(x,scale*.92-.3,z));
+      crowns.setColorAt(i,new T.Color(i%3===0?0xc2ae82:0xb0bb99));
+    }
+    trunks.castShadow=crowns.castShadow=true;
+    landscaping.add(trunks,crowns);
+    scene.add(landscaping);
+  }
 
   let desiredPosition=new T.Vector3(), desiredTarget=new T.Vector3();
   let sweep=null;
   let viewAdjusted=false;
   const orbitOffset=new T.Vector3();
   const stillResolvers=new Set();
+  const levelPoint=new T.Vector3();
+  let selectedLevel=null;
+  function paintLevel(){
+    if(!marker)return;
+    const project=projects[current], item=modelControls.get(current);
+    marker.hidden=!selectedLevel||!item||item.amount>.015||Boolean(held);
+    if(marker.hidden)return;
+    const {model,origin,stand}=item;
+    levelPoint.copy(stand.position).add(model.position).sub(origin);
+    levelPoint.y+=project.height*(selectedLevel-.5)/project.floors;
+    levelPoint.project(camera);
+    marker.hidden=levelPoint.z>1||levelPoint.z< -1||Math.abs(levelPoint.x)>1||Math.abs(levelPoint.y)>1;
+    marker.style.left=host.offsetLeft+(levelPoint.x+1)*host.clientWidth/2+'px';
+    marker.style.top=host.offsetTop+(1-levelPoint.y)*host.clientHeight/2+'px';
+    marker.textContent='Level '+selectedLevel+' · approx.';
+  }
   function settle(){
     if(dynamic||(sweep&&!sweep.continuous))return;
     for(const resolve of stillResolvers)resolve();
@@ -146,7 +190,7 @@ export function createScene(host,{hero=false,onSelect=()=>{},quality='high'}={})
     orbit.enableDamping=true;
     orbit.maxPolarAngle=1.52;
     orbit.minDistance=4;
-    orbit.maxDistance=95;
+    orbit.maxDistance=catalog?126:95;
     orbit.addEventListener('start',()=>{viewAdjusted=true;stopMotion();});
     orbit.addEventListener('change',()=>{dirty=true;});
   }
@@ -195,6 +239,7 @@ export function createScene(host,{hero=false,onSelect=()=>{},quality='high'}={})
     if(dirty || (hero&&!reduceMotion&&now-lastRender>44)){
       sign.rotation.y=Math.atan2(camera.position.x,camera.position.z);
       renderer.render(scene,camera);
+      paintLevel();
       dirty=false;
       lastRender=now;
     }
@@ -204,20 +249,25 @@ export function createScene(host,{hero=false,onSelect=()=>{},quality='high'}={})
     const {clientWidth:w,clientHeight:h}=host;
     if(!w||!h)return;
     camera.aspect=w/h;
+    if(tour&&w>=681)camera.setViewOffset(w,h,-w*.09,0,w,h);
+    else camera.clearViewOffset();
     camera.updateProjectionMatrix();
     renderer.setSize(w,h,false);
-    if(orbit&&current<0&&!viewAdjusted)reset();
+    if(orbit&&(current<0||tour)&&!viewAdjusted)reset();
     dirty=true;
   }
   const observer=new ResizeObserver(resize);
   observer.observe(host);
   function reset(animate=false){
     viewAdjusted=false;
-    const point=current<0?new T.Vector3(0,0,-1.4):new T.Vector3(...locations[current]);
-    const target=point.clone().add(new T.Vector3(0,current<0?3.35:4.75,0));
-    const fit=current<0?Math.max(1,1.18/camera.aspect):Math.max(1,.72/camera.aspect);
-    const offset=new T.Vector3(...(current<0?[5,29,49]:[8,9,17])).multiplyScalar(fit);
-    frameCamera(target,point.add(offset),animate);
+    const selected=projects[current];
+    const point=selected?new T.Vector3(...(selected.position||locations[current])):new T.Vector3(0,0,-1.4);
+    const target=point.clone().add(new T.Vector3(0,selected?(tour||catalog?selected.height*.5:4.75):catalog?4.8:3.35,0));
+    const fit=selected?Math.max(1,.72/camera.aspect):Math.max(1,(catalog?.83:1.18)/camera.aspect);
+    const offset=catalog?(selected?[selected.height*.48,selected.height*.65,selected.height*1.48]:[25,58,67]):
+      (selected?(tour?[7,3.2,17]:[8,9,17]):[5,29,49]);
+    const cameraOffset=new T.Vector3(...offset).multiplyScalar(fit);
+    frameCamera(target,point.add(cameraOffset),animate);
   }
   let generation=0;
   async function show(index=-1,animate=false){
@@ -226,11 +276,11 @@ export function createScene(host,{hero=false,onSelect=()=>{},quality='high'}={})
     current=index;
     releaseModel();
     gestureTarget=index;
-    monument.visible=context.group.visible=index<0;
+    monument.visible=index<0&&!catalog;
     dirty=true;
     renderer.shadowMap.needsUpdate=true;
     reset(animate);
-    for(const [key,item] of instances)item.visible=index<0||key===index;
+    for(const [key,item] of instances)item.visible=visibleProject(key);
     host.setAttribute('aria-busy','true');
     try{
       await Promise.all(list.map(async project=>{
@@ -250,18 +300,20 @@ export function createScene(host,{hero=false,onSelect=()=>{},quality='high'}={})
             object.userData.project=project.index;
           }
         });
-        model.rotation.y=[.2,.38,-.25,-.35][project.index];
+        model.rotation.y=catalog?0:[.2,.38,-.25,-.35][project.index];
         const stand=new T.Group();
-        stand.position.set(...locations[project.index]);
-        const base=new T.Mesh(new T.BoxGeometry(project.index===2?5.7:4.8,.23,4.5),platformMaterial);
+        stand.position.set(...(project.position||locations[project.index]));
+        const width=catalog?(bounds.max.x-bounds.min.x)*scale+.55:project.index===2?5.7:4.8;
+        const depth=catalog?(bounds.max.z-bounds.min.z)*scale+.55:4.5;
+        const base=new T.Mesh(new T.BoxGeometry(width,.23,depth),platformMaterial);
         base.position.y=-.135;
         base.receiveShadow=true;
         base.userData.project=project.index;
-        const trim=new T.Mesh(new T.BoxGeometry(project.index===2?5.76:4.86,.035,4.56),edgeMaterial);
+        const trim=new T.Mesh(new T.BoxGeometry(width+.06,.035,depth+.06),edgeMaterial);
         trim.position.y=-.255;
         trim.userData.project=project.index;
         stand.add(model,base,trim);
-        stand.visible=current<0||project.index===current;
+        stand.visible=visibleProject(project.index);
         content.add(stand);
         stand.updateMatrixWorld(true);
         let shell=model;
@@ -376,7 +428,7 @@ export function createScene(host,{hero=false,onSelect=()=>{},quality='high'}={})
   host.classList.add('scene-poster');
   resize();
   frame=requestAnimationFrame(render);
-  return {show,reset:()=>reset(true),stopMotion,grabModel,moveModel,releaseModel,separateModel,whenStill(){
+  return {show,showLevel(level){selectedLevel=level;dirty=true;},reset:()=>reset(true),stopMotion,grabModel,moveModel,releaseModel,separateModel,whenStill(){
     return new Promise(resolve=>{stillResolvers.add(resolve);settle();});
   },zoom(factor,animate=false){
     if(!orbit)return;
@@ -415,6 +467,7 @@ export function createScene(host,{hero=false,onSelect=()=>{},quality='high'}={})
     environment.dispose();
     ground.geometry.dispose();
     ground.material.dispose();
+    city?.dispose();
     for(const tile of site.children)tile.geometry.dispose();
     paving.dispose();
     district.dispose();
@@ -422,7 +475,11 @@ export function createScene(host,{hero=false,onSelect=()=>{},quality='high'}={})
     monument.traverse(object=>object.geometry?.dispose());
     face.material.dispose();
     logo.dispose();
-    context.dispose();
+    for(const mesh of landscaping.children){
+      mesh.geometry.dispose();
+      mesh.material.dispose();
+      mesh.dispose();
+    }
     platformMaterial.dispose();
     edgeMaterial.dispose();
     for(const stand of instances.values())for(const platform of stand.children.slice(1))platform.geometry.dispose();

@@ -61,3 +61,18 @@ Set `ELEVENLABS_API_KEY` in the local server environment and restart the app. On
 
 The server streams Eleven Flash v2.5 replies and keeps the credential server-side. Allow Speech to Text on the key to use ElevenLabs Scribe v2 Realtime for the Voice button and active hands-free conversations. The app uses short-lived single-use tokens for those microphone streams. In standby, clap detection is local and the spoken wake phrase uses browser recognition. The wake greeting plays from the bundled audio file. Ralix computes answers from local demo records.
 
+
+## Property Universe 3D
+
+Use **Open Property Universe 3D** in the Property Universe gallery. Selecting a building frames it in the viewer and exposes its GLB download. The map uses schematic roads, waterfront and neighborhood placement. Tower heights are illustrative scene units.
+
+| Building | Reconstruction reference |
+| --- | --- |
+| Platinum Mall | Tripo turntable `5fa5baf7-9737-431c-80e8-6c1e0def6703` |
+| Nebula | Tripo turntable `263720e2-48a2-491c-b34e-6495a82e75bd` |
+| Valencia | Tripo turntable `d357c634-b7d8-4298-84e8-93dcb7914b0e` |
+| EON | Tripo turntable `0bebab47-5fc3-4bfd-83aa-4d14934448d0` |
+| Fuego | Tripo turntable `7d44538f-7629-4055-8f54-bd3c7bebc208` |
+| White House | Developer's exterior illustration |
+
+The independent meshes approximate visible silhouettes and façade details from these references. To rebuild the six GLBs, run `node scripts/build-mumbai-models.mjs`.

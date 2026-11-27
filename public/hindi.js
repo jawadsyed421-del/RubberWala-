@@ -49,6 +49,11 @@ export function hindiCommand(text){
     return {command:right?'swipe left to right':'swipe right to left',message:'तीन-आयामी दृश्य घुमा रहा हूँ।'};
   }
   if(!navigation||question&&!strongNavigation)return null;
+  if(/फ्लोर प्लान|मंज़िल का नक्शा|मंजिल का नक्शा|floor plan/i.test(text)){
+    const tower=hindiProject(text);
+    const digits=text.match(/[0-9०-९]+/)?.[0].replace(/[०-९]/g,digit=>String(digit.charCodeAt(0)-0x966));
+    return {command:'open floor plan'+(digits?' level '+digits:'')+(tower?' of '+tower.name:''),message:'चुनी हुई मंज़िल का उदाहरण लेआउट खोल रहा हूँ।'};
+  }
   if(/मुनाफ|नफ़ा|लाभ|वाटरप्र|मंज़िल|मंजिल|फ्लोर|\b(?:profit|floor|waterproofing)\b/i.test(text))return null;
   const tower=hindiProject(text);
   if(tower)return {command:'open '+tower.name,message:names[tower.index]+' खोल रहा हूँ।'};
