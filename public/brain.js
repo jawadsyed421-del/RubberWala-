@@ -40,7 +40,7 @@ let conversationActive=false;
 let contextProject=-1;
 let presenting=-1;
 const steps=['home','property','project-demo','ralix','construction','finance','workforce'];
-const stepTitles=['Introduction','Property Universe','Project Intelligence','Meet Ralix','Construction','Finance','AI Brain Map'];
+const stepTitles=['Introduction','Property Universe','Project Intelligence','Meet rAlix','Construction','Finance','AI Brain Map'];
 const metricNames={value:'Illustrative portfolio value',sold:'Units sold',progress:'Construction complete',collected:'Collections',outstanding:'Outstanding',available:'Available units',profit:'Today’s demo profit',revenue:'Demo revenue',expenses:'Demo expenses'};
 const fmt=(key,data)=>key==='profit'?currency(data.today.profit):['value','collected','outstanding','revenue','expenses'].includes(key)?currency(data[key]):key==='progress'?data[key]+'%':data[key].toLocaleString('en-IN');
 const subtitle='Illustrative records · June–November 2026';
@@ -416,11 +416,11 @@ async function showBuildingSections(expand){
 }
 const examples=['What is the profit today?','How many floors are completed?','How much money is outstanding?','Show floor 25 of Blue Glass Tower A','Open the portfolio, then zoom in','Spin from right to left'];
 function jarvis(){
-  return heading('Meet Ralix','Ask about the portfolio and see the underlying demo records.')+`
-    <div class="jarvis-grid"><section class="glass panel jarvis-identity"><button type="button" class="ralix-globe" id="ralix-globe" aria-label="${conversationActive?'Close Ralix conversation':'Start Ralix conversation'}" aria-pressed="${conversationActive}"><span class="ralix-ring"></span><span class="ralix-ring ralix-ring--outer"></span><span class="ralix-core"><i></i><i></i><i></i></span><span class="ralix-echo"></span></button><h2>Ralix</h2><p>Executive intelligence</p><span class="ralix-session-label">${conversationActive?'Conversation active':'Tap the globe to start'}</span></section>
+  return heading('Meet rAlix','Ask about the portfolio and see the underlying demo records.')+`
+    <div class="jarvis-grid"><section class="glass panel jarvis-identity"><button type="button" class="ralix-globe" id="ralix-globe" aria-label="${conversationActive?'Close rAlix conversation':'Start rAlix conversation'}" aria-pressed="${conversationActive}"><span class="ralix-ring"></span><span class="ralix-ring ralix-ring--outer"></span><span class="ralix-core"><i></i><i></i><i></i></span><span class="ralix-echo"></span></button><h2>rAlix</h2><p>Executive intelligence</p><span class="ralix-session-label">${conversationActive?'Conversation active':'Tap the globe to start'}</span></section>
     <section class="glass panel jarvis-response" aria-live="polite"><h2>${lastAnswer?clean(lastAnswer.title):'Ask the portfolio'}</h2>
     ${lastAnswer?`<p class="query">${clean(lastAnswer.query)}</p><strong class="display-number">${clean(lastAnswer.value)}</strong><p>${clean(lastAnswer.detail)}</p>${lastAnswer.route?`<a class="button quiet" href="#${lastAnswer.route}">View supporting records ↗</a>`:''}`:'<p>Start with a question about November sales, construction progress, receivables or a building floor.</p>'}
-    <div class="ralix-transcript" id="ralix-transcript" ${replyTranscript?'':'hidden'}><strong>Ralix reply</strong><p lang="${isHindi(replyTranscript)?'hi':'en'}">${clean(replyTranscript)}</p></div>
+    <div class="ralix-transcript" id="ralix-transcript" ${replyTranscript?'':'hidden'}><strong>rAlix reply</strong><p lang="${isHindi(replyTranscript)?'hi':'en'}">${clean(replyTranscript)}</p></div>
     <div class="suggestions">${examples.map((q,i)=>`<button data-example="${i}">${q} ↗</button>`).join('')}</div></section></div>`;
 }
 function paintRalix(){
@@ -429,7 +429,7 @@ function paintRalix(){
   globe.classList.toggle('is-active',conversationActive);
   globe.classList.toggle('is-speaking',playingReply);
   globe.setAttribute('aria-pressed',String(conversationActive));
-  globe.setAttribute('aria-label',conversationActive?'Close Ralix conversation':'Start Ralix conversation');
+  globe.setAttribute('aria-label',conversationActive?'Close rAlix conversation':'Start rAlix conversation');
   $('.ralix-session-label',view).textContent=conversationActive?'Conversation active':'Tap the globe to start';
 }
 async function runCamera(command){
@@ -676,7 +676,7 @@ function admin(route){
       <section class="glass panel"><h2>Local asset library</h2>${projects.map(p=>`<div class="summary-row"><span>${p.name}</span><a class="text-button" href="${p.path}" download>GLB ↓</a></div>`).join('')}<button class="button quiet" data-export>Export portfolio CSV</button></section>`;
   }
   return heading('Integrations','Connection status for authorized company data.')+`
-    <section class="glass panel"><div class="panel-top"><h2>Ralix voice</h2><span id="tts-provider" class="status-label">Checking voice provider…</span></div>
+    <section class="glass panel"><div class="panel-top"><h2>rAlix voice</h2><span id="tts-provider" class="status-label">Checking voice provider…</span></div>
     <p>With ElevenLabs configured, the Voice button and double-clap conversations use its live transcription and spoken replies. The wake greeting plays locally.</p></section>
     <section class="glass panel"><div class="panel-top"><h2>Google Drive</h2><span class="status-label">Disconnected</span></div>
     <p>Company document access requires a configured OAuth application, approved Drive scopes and server-side credentials.</p>
@@ -939,8 +939,8 @@ const voice=createVoice({
     clearTimeout(dismissVoiceStatus);
     handsFree.dataset.voiceState=name;
     handsFree.setAttribute('aria-pressed',String(enabled));
-    handsFree.title=enabled?'Turn off hands-free Ralix':'Enable hands-free Ralix';
-    $('#hands-free-label').textContent=name==='starting'?'Starting…':name==='limited'?'Voice limited':['listening','speaking','working'].includes(name)?'Ralix active':enabled?'Ralix standby':'Hands-free';
+    handsFree.title=enabled?'Turn off hands-free rAlix':'Enable hands-free rAlix';
+    $('#hands-free-label').textContent=name==='starting'?'Starting…':name==='limited'?'Voice limited':['listening','speaking','working'].includes(name)?'rAlix active':enabled?'rAlix standby':'Hands-free';
     manualVoice.textContent=manual?'Listening…':'Voice';
     manualVoice.disabled=manual||['starting','speaking','working','listening'].includes(name);
     voiceStatus.textContent=message;

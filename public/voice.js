@@ -49,8 +49,8 @@ export function createVoice({onCommand,onState,onDisable,onPlayback,languagePref
     if(document.hidden)state('paused','Microphone paused while this tab is hidden.');
     else if(clapOnly&&!conversation&&!manual)state('clap-standby',clapCount===1?'Conversation closed. Clap once to reopen.':'Conversation closed. Double-clap to reopen.');
     else if(speechError)state('limited',clapListener&&remoteAllowed&&!remoteFailed?'Double-clap to start ElevenLabs speech recognition.':speechError+(clapListener?' Clap activation is ready.':''));
-    else if(conversation||manual)state('listening',feedback||'Ralix is listening. Clap again to close the conversation.');
-    else state('armed',clapListener?(clapCount===1?'Clap once or say “Hey Ralix”.':'Double-clap or say “Hey Ralix”.'):'Say “Hey Ralix”.');
+    else if(conversation||manual)state('listening',feedback||'rAlix is listening. Clap again to close the conversation.');
+    else state('armed',clapListener?(clapCount===1?'Clap once or say “Hey rAlix”.':'Double-clap or say “Hey rAlix”.'):'Say “Hey rAlix”.');
   }
 
   function windowForCommand(){
@@ -222,7 +222,7 @@ export function createVoice({onCommand,onState,onDisable,onPlayback,languagePref
       const token=++commandToken;
       telling=true;
       canInterrupt=false;
-      state('working','Ralix is carrying out your command…');
+      state('working','rAlix is carrying out your command…');
       void Promise.resolve(result).then(
         reply=>{if(token===commandToken)complete(reply);},
         ()=>{if(token===commandToken)complete({action:true,message:'I couldn’t complete that command.'});},
@@ -334,7 +334,7 @@ export function createVoice({onCommand,onState,onDisable,onPlayback,languagePref
       if(session.retryNative){schedule(0);return;}
       if(speechError||(telling&&!canInterrupt))return;
       if(remote&&!session.intentional&&!remoteFailed&&(conversation||manual)){
-        if(!telling)state('reconnecting','Reconnecting Ralix’s microphone…');
+        if(!telling)state('reconnecting','Reconnecting rAlix’s microphone…');
         schedule(session.error?200*networkRetries:0);
         return;
       }

@@ -27,12 +27,12 @@ export function arrivalPage(){
   <section class="arrival-workspace" aria-labelledby="arrival-workspace-title">
     <div class="arrival-workspace-intro">
       <h2 id="arrival-workspace-title" tabindex="-1">Rubberwala workspace</h2>
-      <p>Explore the buildings, review project records, or ask Ralix in English or Hindi.</p>
+      <p>Explore the buildings, review project records, or ask rAlix in English or Hindi.</p>
     </div>
     <div class="arrival-links">
       <a href="#property" class="arrival-link arrival-link--property"><strong>Property Universe</strong><span>Explore the towers in 3D and select a floor.</span><i aria-hidden="true">↗</i></a>
       <a href="#command" class="arrival-link"><strong>Command Centre</strong><span>Review sales, collections and construction progress.</span><i aria-hidden="true">↗</i></a>
-      <a href="#ralix" class="arrival-link"><strong>Ask Ralix</strong><span>Speak a command or ask about the portfolio.</span><i aria-hidden="true">↗</i></a>
+      <a href="#ralix" class="arrival-link"><strong>Ask rAlix</strong><span>Speak a command or ask about the portfolio.</span><i aria-hidden="true">↗</i></a>
     </div>
     <nav class="arrival-section-links" aria-label="Workspace sections">
       <a href="#sales">Sales &amp; CRM</a><a href="#construction">Construction</a><a href="#finance">Finance</a><a href="#operations">Departments</a><a href="#documents">Documents</a>

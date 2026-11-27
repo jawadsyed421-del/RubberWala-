@@ -9,31 +9,31 @@
 <header class="topbar">
  <a class="brand-logo" href="#home" aria-label="Rubberwala Brain home"><img src="/rubberwala-logo.png" width="441" height="332" alt="Rubberwala — The difference is personal"></a>
  <nav aria-label="Main navigation" class="topnav">
-  <a href="#command">Command Centre</a><a href="#property">Property Universe</a><a href="#ralix">Ralix</a>
+  <a href="#command">Command Centre</a><a href="#property">Property Universe</a><a href="#ralix">rAlix</a>
  </nav>
- <nav class="tour-header" aria-label="Property Universe"><a href="#command">Portfolio</a><a class="button quiet" href="#ralix">Ask Ralix</a></nav>
+ <nav class="tour-header" aria-label="Property Universe"><a href="#command">Portfolio</a><a class="button quiet" href="#ralix">Ask rAlix</a></nav>
  <div class="head-actions"><span class="demo"><i></i>Executive Demo <span>Illustrative Data</span></span><button id="hands-free" class="button quiet hands-free" type="button" aria-pressed="false" data-voice-state="off"><span class="mic-dot" aria-hidden="true"></span><span id="hands-free-label">Hands-free</span></button><button id="present" class="button quiet">Presentation <span aria-hidden="true">↗</span></button><button id="menu" class="button quiet" aria-label="Toggle navigation" aria-expanded="false">Menu</button></div>
 </header>
 <main id="app">
  <section class="page workspace" id="workspace">
   <aside class="sidebar">
    <nav aria-label="Executive workspace">
-    <p>Intelligence</p><a href="#command">Command Centre</a><a href="#property">Property Universe</a><a href="#ralix">Ralix</a><a href="#workforce">AI Brain Map</a><a href="#insights">AI Insights</a>
+    <p>Intelligence</p><a href="#command">Command Centre</a><a href="#property">Property Universe</a><a href="#ralix">rAlix</a><a href="#workforce">AI Brain Map</a><a href="#insights">AI Insights</a>
     <p>Operations</p><a href="#sales">Sales &amp; CRM</a><a href="#construction">Construction</a><a href="#finance">Finance</a><a href="#operations">Departments</a>
     <p>Workspace</p><a href="#documents">Documents</a><a href="#tasks">Tasks</a><a href="#approvals">Approval Centre</a><a href="#integrations">Integrations</a><a href="#showroom">Customer Showroom</a>
    </nav>
   </aside>
   <div class="workspace-main">
    <div id="view"></div>
-   <form id="dock" class="glass dock"><a href="#ralix" class="dock-name"><span class="orb small"></span> Ralix</a><label class="sr" for="dock-query">Ask Ralix</label><input id="dock-query" placeholder="Ask about sales, construction or collections…"><button type="button" id="voice" class="button quiet" aria-label="Start voice input">Voice</button><button class="button primary" type="submit">Ask <span aria-hidden="true">↗</span></button></form>
+   <form id="dock" class="glass dock"><a href="#ralix" class="dock-name"><span class="orb small"></span> rAlix</a><label class="sr" for="dock-query">Ask rAlix</label><input id="dock-query" placeholder="Ask about sales, construction or collections…"><button type="button" id="voice" class="button quiet" aria-label="Start voice input">Voice</button><button class="button primary" type="submit">Ask <span aria-hidden="true">↗</span></button></form>
   </div>
  </section>
 </main>
 <dialog id="drill"><button class="button quiet close" aria-label="Close">Close</button><div id="drill-content"></div></dialog>
 <div id="voice-status" class="voice-status" role="status" hidden></div>
 <dialog id="voice-setup" aria-labelledby="voice-heading">
- <h2 id="voice-heading">Hands-free Ralix</h2>
- <p>Say <strong>“Hey Ralix”</strong> or clap to start a conversation. Clap again to return to standby. Say “stop listening” to turn off the microphone.</p>
+ <h2 id="voice-heading">Hands-free rAlix</h2>
+ <p>Say <strong>“Hey rAlix”</strong> or clap to start a conversation. Clap again to return to standby. Say “stop listening” to turn off the microphone.</p>
  <label class="wake-setting" for="clap-count">Clap to wake <select id="clap-count"><option value="2">Double clap</option><option value="1">Single clap</option></select></label>
  <label class="wake-setting" for="speech-language">Voice language <select id="speech-language"><option value="auto">Automatic · English / हिन्दी</option><option value="en">English</option><option value="hi">हिन्दी</option></select></label>
  <p class="muted">Standby starts when microphone access is granted and pauses when this tab is hidden. When ElevenLabs is configured, it receives microphone audio during active conversations.</p>
